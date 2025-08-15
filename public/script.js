@@ -70,7 +70,21 @@ chatCloseBtn.addEventListener("click", () => {
 socket.on("updateMembers", (members) => {
   console.log("Members:", members);
 });
+// ================================
+//  SPLASH SCREEN FADE
+// ================================
+window.addEventListener('load', () => {
+  const landing = document.getElementById('landing');
+  const container = document.querySelector('.container');
 
+  setTimeout(() => {
+    landing.style.opacity = '0';
+    setTimeout(() => {
+      landing.style.display = 'none';
+      container.style.display = 'grid';
+    }, 1000); // matches CSS transition time
+  }, 2500); // delay before fade starts
+});
 socket.on("groupDisbanded", (reason) => {
   alert(`Group closed: ${reason}`);
   currentRoom = null;
