@@ -352,13 +352,39 @@ async function sendFilesTo(targetId, files) {
   const room = MODE_LOCAL ? null : (currentRoom || null);
 
   for (const file of files) {
-    const fileId = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    const fileId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const cBytes = chunkSize();
+
     socket.emit('fileMeta', {
-      targetId, room, fileId,
-      name: file.name, size: file.size, mime: file.type || 'application/octet-stream',
+      targetId,
+      room,
+      fileId,
+      name: file.name,
+      size: file.size,
+      mime: file.type || 'application/octet-stream',
       chunkBytes: cBytes
     });
+
+    let offset = 0;
+    let seq = 0;
+
+    while (offset < file.size) {
+      const end = Math.min(offset + cBytes, file.size);
+
+      // Read chunk as ArrayBuffer
+      const chunk = await file.slice(offset, end).arrayBuffer();
+
+      // Send chunk & wait a small delay to avoid flooding
+      socket.emit('fileChunk', { targetId, fileId, seq, chunk });
+      await new Promise(r => setTimeout(r, MODE_LOCAL ? 2 : 0)); // small throttle for local
+
+      offset = end;
+      seq++;
+    }
+
+    socket.emit('fileComplete', { targetId, fileId });
+  }
+}
 
     // slice & send
     let offset = 0, seq = 0;
