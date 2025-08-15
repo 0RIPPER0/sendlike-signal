@@ -73,7 +73,9 @@ function renderMembers(list) {
     av.textContent = (m.name || '?').trim().charAt(0).toUpperCase() || '?';
     const nm = document.createElement('div');
     nm.textContent = m.name || '—';
-    nm.style.fontSize = '.9rem'; nm.style.color = 'var(--text)'; nm.style.fontWeight = 600;
+    nm.style.fontSize = '.9rem';
+    nm.style.color = 'var(--text)';
+    nm.style.fontWeight = 600;
     card.appendChild(av);
     card.appendChild(nm);
     membersList.appendChild(card);
@@ -85,21 +87,17 @@ function appendMsg({ you = false, name, text }) {
   line.textContent = `${name}: ${text}`;
   chatMessages.appendChild(line);
   chatMessages.scrollTop = chatMessages.scrollHeight;
-  if (chatBox.hidden) chatDot.hidden = false; // unread indicator
+  if (chatBox.style.display !== 'block') chatDot.hidden = false; // unread indicator
 }
 
 // ------------------------------
 // Landing (robust fade + plane loop)
 // ------------------------------
 function startLanding() {
-  // show app AFTER fade to avoid flash
-  // 1) kick first animation
   loopPlane();
-  // 2) fade out after 2.5s
   setTimeout(() => {
     landing.classList.add('hidden');
   }, 2500);
-  // 3) when CSS transition ends, hide landing & reveal app
   landing.addEventListener('transitionend', () => {
     landing.style.display = 'none';
     app.hidden = false;
@@ -110,11 +108,10 @@ function loopPlane() {
   const trail = landing.querySelector('.contrail');
   plane.style.animation = 'none';
   trail.style.animation = 'none';
-  // force-reflow
   void plane.offsetWidth; void trail.offsetWidth;
   plane.style.animation = 'planeCurve 1.5s ease-in forwards';
   trail.style.animation = 'contrailFade 1.5s ease-in forwards';
-  setTimeout(loopPlane, 3800); // loop without looking static
+  setTimeout(loopPlane, 3800);
 }
 
 // ------------------------------
@@ -125,7 +122,7 @@ aboutBtn.addEventListener('click', () => {
 });
 
 // ------------------------------
-// Mode toggle (single changing label)
+// Mode toggle
 // ------------------------------
 modeSwitch.addEventListener('change', () => {
   modeLabel.textContent = modeSwitch.checked ? '📡 Local Mode' : '🌐 Online Mode';
@@ -139,18 +136,12 @@ createBtn.addEventListener('click', () => {
   if (!name) return alert('Enter your name');
 
   myName = name;
-  // default 10 minutes join window (server enforces)
   socket.emit('createGroup', { name, ttlMinutes: 10 }, ({ code, hostId: hId }) => {
     currentRoom = code;
     hostId = hId;
     isHost = true;
-
-    // Reflect in UI
-    joinCodeInput.value = code; // convenience fill
+    joinCodeInput.value = code;
     setSessionUI({ code, roleText: 'Host', statusText: 'Active' });
-
-    // Immediate members render (we’ll also get updateMembers)
-    // appendMsg is not needed here
   });
 });
 
@@ -173,7 +164,7 @@ joinBtn.addEventListener('click', () => {
 });
 
 // ------------------------------
-// Disband (host only)
+// Disband Group
 // ------------------------------
 disbandBtn.addEventListener('click', () => {
   if (!isHost || !currentRoom) return;
@@ -181,14 +172,14 @@ disbandBtn.addEventListener('click', () => {
 });
 
 // ------------------------------
-// Chat bubble + panel
+// Chat toggle
 // ------------------------------
 chatFab.addEventListener('click', () => {
-  chatBox.hidden = !chatBox.hidden;
-  if (!chatBox.hidden) chatDot.hidden = true;
+  chatBox.style.display = chatBox.style.display === 'block' ? 'none' : 'block';
+  if (chatBox.style.display === 'block') chatDot.hidden = true;
 });
 chatClose.addEventListener('click', () => {
-  chatBox.hidden = true;
+  chatBox.style.display = 'none';
 });
 
 // ------------------------------
@@ -197,7 +188,6 @@ chatClose.addEventListener('click', () => {
 function sendChat() {
   const text = (chatInput.value || '').trim();
   if (!text || !currentRoom) return;
-  // echo to self
   appendMsg({ you: true, name: myName || 'Me', text });
   socket.emit('chat', { room: currentRoom, name: myName || 'Guest', text });
   chatInput.value = '';
@@ -210,68 +200,28 @@ chatInput.addEventListener('keydown', (e) => {
 // ------------------------------
 // Socket events
 // ------------------------------
-
-// Members update — everyone sees who’s in
 socket.on('updateMembers', (list) => {
   members = Array.isArray(list) ? list : [];
   renderMembers(members);
 });
 
-// Incoming chat — show (and notify if collapsed)
 socket.on('chat', ({ name, text }) => {
+  if (name === myName) return; // Skip own messages
   appendMsg({ name: name || 'Guest', text: text || '' });
 });
 
-// Group disbanded — reset UI
 socket.on('groupDisbanded', (reason) => {
   alert(`Group closed: ${reason || 'Closed'}`);
-  currentRoom = null; hostId = null; isHost = false;
-  sessionInfo.hidden = true; disbandBtn.hidden = true;
-  members = []; renderMembers(members);
+  currentRoom = null;
+  hostId = null;
+  isHost = false;
+  sessionInfo.hidden = true;
+  disbandBtn.hidden = true;
+  members = [];
+  renderMembers(members);
 });
 
 // ------------------------------
 // Boot
 // ------------------------------
 window.addEventListener('load', startLanding);
-
-/* ================================
-   FIX: Chat Toggle Open/Close
-================================ */
-chatFab.addEventListener('click', () => {
-  chatBox.hidden = !chatBox.hidden;
-  if (!chatBox.hidden) chatDot.hidden = true;
-});
-chatClose.addEventListener('click', () => {
-  chatBox.hidden = true;
-});
-
-/* ================================
-   FIX: Send Chat (no double echo)
-================================ */
-function sendChat() {
-  const text = (chatInput.value || '').trim();
-  if (!text || !currentRoom) return;
-
-  // Show locally ONLY ONCE
-  appendMsg({ you: true, name: myName || 'Me', text });
-
-  // Tell server (server should broadcast to others, but NOT back to sender)
-  socket.emit('chat', { room: currentRoom, name: myName || 'Guest', text });
-
-  chatInput.value = '';
-}
-
-sendChatBtn.addEventListener('click', sendChat);
-chatInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') sendChat();
-});
-
-/* ================================
-   Incoming chat (from others only)
-   NOTE: Server must NOT emit back to sender
-================================ */
-socket.on('chat', ({ name, text }) => {
-  if (name === myName) return; // ignore my own messages
-  appendMsg({ name: name || 'Guest', text: text || '' });
-});
