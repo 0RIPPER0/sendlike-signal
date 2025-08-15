@@ -1,11 +1,12 @@
-<!-- ================================
-     HTML - SendLike
-================================ -->
+<!-- =========================================================
+=  SendLike — UI (Landing + Online/Local + Members + Chat)  =
+=  Works with your existing server.js (create/join/chat/etc) =
+========================================================== -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SendLike</title>
 
   <!-- Fonts -->
@@ -14,76 +15,101 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
 
-  <!-- Landing Page -->
-  <div id="landing">
-    <h1>
-      Fast enough to make your WIFI blush...<br>
-      Because your file deserve a First Class 
-      <span class="plane">✈️</span>
-      <span class="contrail"></span>
+  <!-- =====================================================
+       LANDING (Splash) — fades out after load (robust)
+  ====================================================== -->
+  <div id="landing" aria-hidden="true">
+    <h1 class="tagline">
+      Fast enough to make your WIFI blush...<br/>
+      Because your file deserve a First Class
+      <span class="plane" aria-hidden="true">✈️</span>
+      <span class="contrail" aria-hidden="true"></span>
     </h1>
   </div>
 
-  <!-- Main Content -->
-  <div class="container" style="display:none;">
+  <!-- =====================================================
+       MAIN APP
+  ====================================================== -->
+  <div class="container" id="app" hidden>
     <!-- Header -->
-    <header>
-      <h1>
-        <img src="icon.png" alt="SendLike Logo">
-        SendLike
+    <header class="app-header">
+      <h1 class="brand">
+        <img src="icon.png" alt="" class="logo"/>
+        <span>SendLike</span>
       </h1>
-      <button onclick="showAbout()">About</button>
+      <button class="btn" id="aboutBtn" type="button">About</button>
     </header>
 
-    <!-- Mode Toggle -->
-    <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
-      <div id="modeLabel">🌐 Online Mode</div>
-      <label class="switch">
-        <input type="checkbox" id="modeSwitch">
+    <!-- Mode Toggle (single changing label) -->
+    <section class="card card-row">
+      <div id="modeLabel" class="mode-label" aria-live="polite">🌐 Online Mode</div>
+      <label class="switch" title="Toggle Online / Local">
+        <input type="checkbox" id="modeSwitch" />
         <span class="slider"></span>
       </label>
-    </div>
+    </section>
+
+    <!-- Online Join -->
+    <section class="card">
+      <h2>Online (with Code)</h2>
+      <div class="grid-col">
+        <input id="nameOnline" type="text" placeholder="Your name" />
+        <input id="joinCode" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit code" />
+        <button id="joinBtn" class="btn btn-primary" type="button">Join Group</button>
+      </div>
+    </section>
 
     <!-- Create Group -->
-    <div class="card">
+    <section class="card">
       <h2>Create a New Group</h2>
-      <div style="display: grid; gap: 1rem;">
-        <input id="nameHost" type="text" placeholder="Your name (blank = funny name)">
-        <button id="createBtn">Create Group</button>
+      <div class="grid-col">
+        <input id="nameHost" type="text" placeholder="Your name" />
+        <button id="createBtn" class="btn btn-primary" type="button">Create Group</button>
       </div>
 
-      <!-- Group Info -->
-      <div style="margin-top:1rem;">
-        <strong>Group Code:</strong> <span id="groupCode">--</span> • join open for 10 min
+      <!-- Info row after creating/joining -->
+      <div id="sessionInfo" class="session-info" hidden>
+        <div>
+          <strong>Status:</strong> <span id="sessionStatus">—</span>
+        </div>
+        <div>
+          <strong>Group Code:</strong> <span id="sessionCode">———</span>
+        </div>
+        <div>
+          <strong>Role:</strong> <span id="sessionRole">—</span>
+        </div>
+        <button id="disbandBtn" class="btn btn-danger" type="button" hidden>Disband Group</button>
       </div>
+    </section>
 
-      <!-- Members List -->
-      <h3>Members</h3>
-      <div id="members" style="display: flex; gap: .5rem; flex-wrap: wrap;"></div>
+    <!-- Members List (Snapdrop-style simple avatars) -->
+    <section class="card">
+      <h2>Members</h2>
+      <div id="membersList" class="members"></div>
+    </section>
+  </div>
+
+  <!-- =====================================================
+       Floating Chat (bubble + panel)
+  ====================================================== -->
+  <button id="chatToggleBtn" class="chat-fab" type="button" title="Group Chat">
+    💬
+    <span id="chatNotifDot" class="notif-dot" hidden></span>
+  </button>
+
+  <div id="chatBox" class="chat-box" hidden>
+    <div class="chat-header">
+      <span>Group Chat</span>
+      <button id="chatCloseBtn" class="btn btn-ghost" type="button" aria-label="Close chat">✖</button>
     </div>
-
-    <!-- Join Group -->
-    <div class="card">
-      <h2>Online (with Code)</h2>
-      <div style="display: grid; gap: 1rem;">
-        <input id="nameOnline" type="text" placeholder="Your name (blank = funny name)">
-        <input id="joinCode" type="text" placeholder="6-digit code" maxlength="6">
-        <button id="joinBtn">Join Group</button>
-      </div>
-    </div>
-
-    <!-- Chat Section -->
-    <div id="chatSection" class="card" style="display:none;">
-      <h2>Group Chat</h2>
-      <div id="chatMessages" class="chat-box"></div>
-      <div style="display:grid; grid-template-columns: 1fr auto; gap:1rem;">
-        <input id="chatInput" type="text" placeholder="Type a message...">
-        <button id="sendChatBtn">Send</button>
-      </div>
+    <div id="chatMessages" class="chat-scroll"></div>
+    <div class="chat-input">
+      <input id="chatInput" type="text" placeholder="Type a message..." />
+      <button id="sendChatBtn" class="btn" type="button">Send</button>
     </div>
   </div>
 
