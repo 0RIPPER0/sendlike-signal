@@ -1,85 +1,62 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-const cors = require("cors");
+
+// server.js
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
 
 const app = express();
-app.use(cors());
 const server = http.createServer(app);
+const io = new Server(server);
 
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  },
-  maxHttpBufferSize: 1e8 // ~100MB per transfer
-});
+app.use(express.static(path.join(__dirname, 'public')));
 
-let users = [];
-let hostId = null;
+let groups = {}; // { code: { hostId, members: [{id,name}], files: [] } }
 
-io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
+function generateCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
-  socket.on("join-group", (username) => {
-    users.push({ id: socket.id, name: username });
+io.on('connection', (socket) => {
+  console.log('New connection:', socket.id);
 
-    // Assign host if none exists
-    if (!hostId) hostId = socket.id;
-
-    // Tell this user if they are host
-    socket.emit("host-status", socket.id === hostId);
-
-    // Update user list for everyone
-    io.emit("update-users", users);
+  socket.on('create_group', (hostName, callback) => {
+    let code = generateCode();
+    groups[code] = { hostId: socket.id, members: [{ id: socket.id, name: hostName }], files: [] };
+    socket.join(code);
+    callback({ code });
+    io.to(socket.id).emit('members_update', groups[code].members);
   });
 
-  socket.on("send-file", (fileData) => {
-    if (fileData.target) {
-      // Send to specific user
-      io.to(fileData.target).emit("receive-file", {
-        name: fileData.name,
-        size: fileData.size,
-        type: fileData.type,
-        data: fileData.data
-      });
-    } else {
-      // Broadcast to all except sender
-      socket.broadcast.emit("receive-file", {
-        name: fileData.name,
-        size: fileData.size,
-        type: fileData.type,
-        data: fileData.data
-      });
+  socket.on('join_group', ({ code, name }, callback) => {
+    if (!groups[code]) {
+      callback({ error: 'Group not found' });
+      return;
     }
+    groups[code].members.push({ id: socket.id, name });
+    socket.join(code);
+    callback({ success: true });
+    io.to(groups[code].hostId).emit('members_update', groups[code].members);
   });
 
-  socket.on("disband-group", () => {
-    if (socket.id === hostId) {
-      io.emit("group-disbanded");
-      users = [];
-      hostId = null;
-    }
+  socket.on('send_file', ({ code, fileName, fileBuffer }) => {
+    if (!groups[code]) return;
+    socket.to(code).emit('receive_file', { fileName, fileBuffer });
   });
 
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
-    users = users.filter(u => u.id !== socket.id);
-
-    // If host leaves without disbanding, assign new host
-    if (socket.id === hostId) {
-      if (users.length > 0) {
-        hostId = users[0].id;
-        io.to(hostId).emit("host-status", true);
+  socket.on('disconnect', () => {
+    for (let code in groups) {
+      let group = groups[code];
+      group.members = group.members.filter(m => m.id !== socket.id);
+      if (socket.id === group.hostId) {
+        io.to(code).emit('group_disbanded');
+        delete groups[code];
       } else {
-        hostId = null;
+        io.to(group.hostId).emit('members_update', group.members);
       }
     }
-
-    io.emit("update-users", users);
   });
 });
 
-server.listen(process.env.PORT || 3000, () => {
-  console.log("Server running...");
-});
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

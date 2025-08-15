@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>SendLike - Group File Share</title>
+  <style>
+    body { font-family: Arial; margin: 20px; }
+    #members { margin-top: 20px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>SendLike</h1>
+  <div id="start">
+    <input id="name" placeholder="Your name"><br><br>
+    <button onclick="createGroup()">Create Group</button>
+    <button onclick="showJoin()">Join Group</button>
+  </div>
+
+  <div id="join" class="hidden">
+    <input id="joinCode" placeholder="Enter 6-digit code"><br><br>
+    <button onclick="joinGroup()">Join</button>
+  </div>
+
+  <div id="hostPanel" class="hidden">
+    <h3>Group Code: <span id="groupCode"></span></h3>
+    <h4>Members:</h4>
+    <ul id="members"></ul>
+    <input type="file" id="fileInput">
+    <button onclick="sendFile()">Send File to All</button>
+  </div>
+
+  <div id="memberPanel" class="hidden">
+    <h3>Connected to Group</h3>
+    <p>Waiting for host to send files...</p>
+  </div>
+
+  <div id="disbanded" class="hidden">
+    <h2>Group Disbanded</h2>
+  </div>
+
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script>
+    const socket = io();
+    let currentCode = null;
+    let isHost = false;
+
+    function createGroup() {
+      const name = document.getElementById('name').value;
+      socket.emit('create_group', name, ({ code }) => {
+        currentCode = code;
+        isHost = true;
+        document.getElementById('groupCode').textContent = code;
+        document.getElementById('start').classList.add('hidden');
+        document.getElementById('hostPanel').classList.remove('hidden');
+      });
+    }
+
+    function showJoin() {
+      document.getElementById('start').classList.add('hidden');
+      document.getElementById('join').classList.remove('hidden');
+    }
+
+    function joinGroup() {
+      const name = document.getElementById('name').value;
+      const code = document.getElementById('joinCode').value;
+      socket.emit('join_group', { code, name }, (res) => {
+        if (res.error) {
+          alert(res.error);
+        } else {
+          currentCode = code;
+          document.getElementById('join').classList.add('hidden');
+          document.getElementById('memberPanel').classList.remove('hidden');
+        }
+      });
+    }
+
+    socket.on('members_update', (members) => {
+      const list = document.getElementById('members');
+      list.innerHTML = '';
+      members.forEach(m => {
+        const li = document.createElement('li');
+        li.textContent = m.name;
+        list.appendChild(li);
+      });
+    });
+
+    function sendFile() {
+      const file = document.getElementById('fileInput').files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        socket.emit('send_file', { code: currentCode, fileName: file.name, fileBuffer: e.target.result });
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    socket.on('receive_file', ({ fileName, fileBuffer }) => {
+      const blob = new Blob([fileBuffer]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+    });
+
+    socket.on('group_disbanded', () => {
+      document.querySelectorAll('div').forEach(div => div.classList.add('hidden'));
+      document.getElementById('disbanded').classList.remove('hidden');
+    });
+  </script>
+</body>
+</html>
