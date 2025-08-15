@@ -16,12 +16,12 @@
 <body>
 
   <!-- =======================
-       LANDING PAGE (unchanged)
+       LANDING PAGE
   ======================= -->
   <div id="landing">
     <h1>
       Fast enough to make your WIFI blush...<br>
-      Because your file deserve a First Class
+      Because your file deserves a First Class
       <span class="plane">✈️</span>
       <span class="contrail"></span>
     </h1>
@@ -40,7 +40,7 @@
       <button id="aboutBtn">About</button>
     </header>
 
-    <!-- Mode Toggle + Open Share (host only) -->
+    <!-- Mode Toggle + Open Share -->
     <div class="card row-between">
       <div class="row-center gap">
         <div id="modeLabel">🌐 Online Mode</div>
@@ -58,26 +58,29 @@
       </div>
     </div>
 
-    <!-- ONLINE: Join with Code -->
-    <div id="cardOnlineJoin" class="card">
-      <h2>Online (with Code)</h2>
-      <div class="grid-1">
-        <input id="nameOnline" type="text" placeholder="Your name" />
-        <input id="joinCode" type="text" placeholder="6-digit code" maxlength="6" />
-        <button id="joinBtn">Join Group</button>
+    <!-- Online Join/Create -->
+    <div id="onlineControls">
+      <!-- JOIN -->
+      <div id="cardOnlineJoin" class="card">
+        <h2>Online (with Code)</h2>
+        <div class="grid-1">
+          <input id="nameOnline" type="text" placeholder="Your name" />
+          <input id="joinCode" type="text" placeholder="6-digit code" maxlength="6" />
+          <button id="joinBtn">Join Group</button>
+        </div>
+      </div>
+
+      <!-- CREATE -->
+      <div id="cardOnlineCreate" class="card">
+        <h2>Create a New Group</h2>
+        <div class="grid-1">
+          <input id="nameHost" type="text" placeholder="Your name" />
+          <button id="createBtn">Create Group</button>
+        </div>
       </div>
     </div>
 
-    <!-- ONLINE: Create Group -->
-    <div id="cardOnlineCreate" class="card">
-      <h2>Create a New Group</h2>
-      <div class="grid-1">
-        <input id="nameHost" type="text" placeholder="Your name" />
-        <button id="createBtn">Create Group</button>
-      </div>
-    </div>
-
-    <!-- Session Info + Disband -->
+    <!-- Session Info -->
     <div id="sessionInfo" class="card" hidden>
       <div class="row-between">
         <div>
@@ -89,7 +92,7 @@
       </div>
     </div>
 
-    <!-- People List (members or local devices) -->
+    <!-- People List -->
     <div id="peopleCard" class="card">
       <h2 id="peopleTitle">Members</h2>
       <div id="peopleList" class="people-grid"></div>
@@ -116,7 +119,7 @@
     </div>
   </div>
 
-  <!-- Hidden file picker (multi) -->
+  <!-- File Picker -->
   <input id="fileInput" type="file" multiple hidden />
 
   <!-- Scripts -->
