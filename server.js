@@ -19,7 +19,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-app.use(express.static(path.join(__dirname, "."))); // serve root (index.html, style.css, script.js)
+app.use(express.static(path.join(__dirname, "public"))); // serve root (index.html, style.css, script.js)
 
 /* -------------------------
    In-memory state
