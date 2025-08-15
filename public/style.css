@@ -83,3 +83,6 @@ input:checked + .slider:before { transform: translateX(26px); }
   padding: 0.5rem;
   gap: 0.5rem;
 }
+#landing {
+  transition: opacity 1s ease;
+}
