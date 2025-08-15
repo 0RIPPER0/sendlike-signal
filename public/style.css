@@ -89,3 +89,21 @@ input:checked + .slider:before{transform:translateX(24px)}
 .modal-body{padding:14px}
 .modal-foot{display:flex;justify-content:flex-end;padding:12px 14px;background:#fff7ed;border-top:1px solid #fde68a}
 .tag-muted{color:#a16207}
+/* Fix join code input click issue */
+#joinCode {
+  position: relative;
+  z-index: 10;
+  pointer-events: auto;
+  background-color: #fff; /* ensures no transparency issue */
+}
+#joinCode:focus {
+  outline: 2px solid #ffb84d; /* highlight when typing */
+}
+#joinBtn {
+  position: relative;
+  z-index: 9;
+}
+/* Ensure no overlapping elements block clicks */
+#onlinePanel * {
+  pointer-events: auto;
+}
