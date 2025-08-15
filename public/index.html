@@ -82,5 +82,25 @@
       alert("SendLike - Simple P2P sharing via code or local network.");
     }
   </script>
+  <script>
+  function showAbout() {
+    alert("SendLike - Simple P2P sharing via code or local network.");
+  }
+
+  // Toggle Mode Switch
+  const modeToggle = document.getElementById("modeToggle");
+  const leftLabel = document.querySelector("#modeToggle").parentElement.previousElementSibling;
+  const rightLabel = document.querySelector("#modeToggle").parentElement.nextElementSibling;
+
+  modeToggle.addEventListener("change", () => {
+    if (modeToggle.checked) {
+      leftLabel.textContent = "📡 Local Mode";
+      rightLabel.textContent = "🌐 Online Mode";
+    } else {
+      leftLabel.textContent = "🌐 Online Mode";
+      rightLabel.textContent = "📡 Local Mode";
+    }
+  });
+</script>
 </body>
 </html>
