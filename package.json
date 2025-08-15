@@ -1,13 +1,17 @@
 {
-  "name": "sendlike-server",
+  "name": "sendlike",
   "version": "1.0.0",
-  "main": "server.js",
-  "type": "commonjs",
+  "description": "SendLike — P2P fast share (Local & Online)",
+  "main": "server/server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server/server.js",
+    "dev": "nodemon server/server.js"
   },
   "dependencies": {
     "express": "^4.19.2",
     "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
   }
 }
