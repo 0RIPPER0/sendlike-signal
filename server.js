@@ -1,13 +1,6 @@
-/**
- * ===============================================
- *  SendLike — Server (Express + Socket.IO)
- *  - 6-digit groups
- *  - 10 min join window (group lives on)
- *  - Member roster + chat broadcast
- *  - OpenShare toggle (host-only)
- *  - Disband on host command or host disconnect
- * ===============================================
- */
+// ================================
+//  SERVER SIDE - SendLike
+// ================================
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -17,147 +10,100 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-// Serve static from /public (very important)
+// Serve static files from /public
 app.use(express.static(path.join(__dirname, "public")));
 
-const JOIN_WINDOW_MIN = 10; // default join window
+// Groups storage
+let groups = {};
 
-/** groups[code] shape:
- * {
- *   hostId, createdAt, ttlMs, joinOpenUntil,
- *   openShare: boolean,
- *   members: [{id,name}],
- *   chat: [{name,text,ts}],
- *   timer: NodeJS.Timeout | null
- * }
- */
-const groups = Object.create(null);
+// Generate random 6-digit code
+function genCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
-// ---------- helpers ----------
-const genCode = () =>
-  Math.floor(100000 + Math.random() * 900000).toString();
-
+// Disband group helper
 function disbandGroup(code, reason = "Group closed") {
   const g = groups[code];
   if (!g) return;
   io.to(code).emit("groupDisbanded", reason);
-  if (g.timer) clearTimeout(g.timer);
+  clearTimeout(g.timer);
   delete groups[code];
-  console.log(`[Group] Disband ${code} — ${reason}`);
 }
 
-// only closes joining, does NOT disband
-function startJoinTimer(code) {
+// Start join window timer
+function startGroupTimer(code) {
   const g = groups[code];
   if (!g) return;
-  if (g.timer) clearTimeout(g.timer);
+  clearTimeout(g.timer);
   if (g.ttlMs > 0) {
     g.timer = setTimeout(() => {
-      // join window closed; keep the group alive
-      io.to(code).emit("joinWindowClosed");
-      console.log(`[Group] Join window closed for ${code}`);
+      g.joinOpen = false; // mark join as closed, but group still exists
+      io.to(code).emit("joinClosed");
     }, g.ttlMs);
   }
 }
 
-// ---------- sockets ----------
 io.on("connection", (socket) => {
-  // ========== CREATE GROUP ==========
-  socket.on("createGroup", ({ name = "Host" }, cb = () => {}) => {
+  
+  // ================================
+  //  CREATE GROUP
+  // ================================
+  socket.on("createGroup", ({ name, ttlMinutes = 10 }, cb) => {
     const code = genCode();
-    const createdAt = Date.now();
-    const ttlMs = JOIN_WINDOW_MIN * 60 * 1000;
-
+    const ttlMs = ttlMinutes * 60 * 1000;
     groups[code] = {
       hostId: socket.id,
-      createdAt,
+      createdAt: Date.now(),
       ttlMs,
-      joinOpenUntil: createdAt + ttlMs,
-      openShare: false,
+      joinOpen: true,
       members: [{ id: socket.id, name }],
-      chat: [],
-      timer: null,
+      timer: null
     };
-
     socket.join(code);
-    startJoinTimer(code);
+    startGroupTimer(code);
 
-    cb({
-      ok: true,
-      code,
-      hostId: socket.id,
-      joinOpenUntil: groups[code].joinOpenUntil,
-      openShare: groups[code].openShare,
-      members: groups[code].members,
-      chat: groups[code].chat,
-    });
-
-    io.to(code).emit("updateMembers", groups[code].members);
-    console.log(`[Group] Create ${code} by ${socket.id}`);
+    cb({ code, hostId: socket.id });
+    io.to(code).emit("updateMembers", groups[code].members); // send to everyone
   });
 
-  // ========== JOIN GROUP ==========
-  socket.on("joinGroup", ({ name = "Guest", code }, cb = () => {}) => {
+  // ================================
+  //  JOIN GROUP
+  // ================================
+  socket.on("joinGroup", ({ name, code }, cb) => {
     const g = groups[code];
-    if (!g) return cb({ error: "Group not found." });
+    if (!g) return cb({ error: "Group not found" });
+    if (!g.joinOpen) return cb({ error: "Join window closed" });
 
-    // check join window
-    if (Date.now() > g.joinOpenUntil) {
-      return cb({ error: "Join window closed." });
-    }
-
-    // add member + broadcast
     g.members.push({ id: socket.id, name });
     socket.join(code);
 
-    cb({
-      ok: true,
-      hostId: g.hostId,
-      members: g.members,
-      chat: g.chat, // give existing chat history
-      joinOpenUntil: g.joinOpenUntil,
-      openShare: g.openShare,
-    });
-
-    io.to(code).emit("updateMembers", g.members);
-    console.log(`[Group] ${socket.id} joined ${code} as ${name}`);
+    io.to(code).emit("updateMembers", g.members); // send to everyone including new joiner
+    cb({ ok: true, hostId: g.hostId });
   });
 
-  // ========== CHAT ==========
+  // ================================
+  //  CHAT
+  // ================================
   socket.on("chat", ({ room, name, text }) => {
-    if (!room || !text) return;
-    const g = groups[room];
-    if (!g) return;
-
-    const msg = { name, text, ts: Date.now() };
-    g.chat.push(msg);
-    // keep last 100
-    if (g.chat.length > 100) g.chat.shift();
-
-    // echo to everyone including sender
-    io.to(room).emit("chat", msg);
+    io.to(room).emit("chat", { name, text }); // send to all including sender
   });
 
-  // ========== HOST: OpenShare toggle ==========
-  socket.on("toggleOpenShare", ({ code, value }) => {
-    const g = groups[code];
-    if (!g || g.hostId !== socket.id) return;
-    g.openShare = !!value;
-    io.to(code).emit("openShareUpdated", g.openShare);
-  });
-
-  // ========== HOST: Disband ==========
+  // ================================
+  //  DISBAND
+  // ================================
   socket.on("disbandGroup", (code) => {
     const g = groups[code];
     if (!g || g.hostId !== socket.id) return;
     disbandGroup(code, "Host disbanded");
   });
 
-  // ========== Disconnect cleanup ==========
+  // ================================
+  //  DISCONNECT
+  // ================================
   socket.on("disconnect", () => {
-    for (const code of Object.keys(groups)) {
+    Object.keys(groups).forEach((code) => {
       const g = groups[code];
-      if (!g) continue;
+      if (!g) return;
       const idx = g.members.findIndex((m) => m.id === socket.id);
       if (idx !== -1) {
         const wasHost = g.hostId === socket.id;
@@ -168,12 +114,10 @@ io.on("connection", (socket) => {
           io.to(code).emit("updateMembers", g.members);
         }
       }
-    }
+    });
   });
 });
 
-// ---------- start ----------
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`[SendLike] listening on http://localhost:${PORT}`);
+server.listen(process.env.PORT || 3000, () => {
+  console.log("Server running");
 });
