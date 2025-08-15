@@ -1,70 +1,106 @@
-:root {
-  --bg1: #0a0118; /* dark purple */
-  --bg2: #2a0057; /* deep violet */
-  --text: #f5f5f5;
-  --muted: #a1a1aa;
-  --card: rgba(255, 255, 255, 0.08);
-  --accent1: #a855f7;
-  --accent2: #9333ea;
-  --shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+:root{
+  --vio1:#ede9fe; --vio2:#ffffff;
+  --ink:#0b1020; --muted:#6b7280;
+  --card:#ffffffbb; --glass:#ffffff33;
+  --accent:#7c3aed; --accent2:#a78bfa;
+  --danger:#ef4444; --shadow:0 20px 60px rgba(17,24,39,.18);
 }
 
-body {
-  margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu;
-  color: var(--text);
-  background: linear-gradient(135deg, var(--bg1), var(--bg2));
-  overflow-x: hidden;
-  position: relative;
+*{box-sizing:border-box}
+body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;color:var(--ink);-webkit-font-smoothing:antialiased}
+.violet{background:linear-gradient(140deg,var(--vio1),var(--vio2));min-height:100vh;position:relative;overflow-x:hidden}
+.bg-anim{position:fixed;inset:0;pointer-events:none;
+  background:
+    radial-gradient(600px 300px at 10% 10%, rgba(167,139,250,.35), transparent),
+    radial-gradient(600px 300px at 80% 30%, rgba(124,58,237,.18), transparent),
+    radial-gradient(700px 380px at 30% 90%, rgba(255,255,255,.6), transparent);
+  filter:saturate(110%) blur(0.2px);
+  animation:float 16s ease-in-out infinite alternate;
 }
+@keyframes float{from{transform:translateY(0)}to{transform:translateY(-12px)}}
 
-/* Animated Grid Overlay */
-.bg-grid {
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
-  background-size: 50px 50px;
-  z-index: 0;
-  animation: moveGrid 20s linear infinite;
-}
-@keyframes moveGrid {
-  from { background-position: 0 0; }
-  to { background-position: 50px 50px; }
-}
+.container{max-width:1024px;margin:0 auto;padding:22px}
+.hero{display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:44px;height:44px;border-radius:16px;display:grid;place-items:center;background:linear-gradient(135deg,#a78bfa,#7c3aed);box-shadow:var(--shadow);color:white}
+.title{font-weight:900;font-size:24px;letter-spacing:.3px}
+.footer{text-align:center;margin-top:18px}
 
-/* Container */
-.container {
-  position: relative;
-  z-index: 1;
-  max-width: 1024px;
-  margin: auto;
-  padding: 20px;
-}
+.tagline{font-size:30px;font-weight:900;margin:10px 0 8px}
+.sub{color:var(--muted)}
 
-/* Cards */
-.card {
-  background: var(--card);
-  backdrop-filter: blur(12px);
-  border-radius: 20px;
-  padding: 16px;
-  box-shadow: var(--shadow);
-  border: 1px solid rgba(255,255,255,0.15);
-}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin:18px 0}
+.card{border-radius:22px;position:relative;overflow:hidden}
+.glass{background:linear-gradient(180deg,var(--card),#ffffff80);backdrop-filter:blur(12px);border:1px solid #ffffff80;box-shadow:var(--shadow);padding:16px;}
+.card.soft{background:#ffffffaa}
+.card .em{font-size:28px}
 
-/* Buttons */
-button {
-  padding: 10px 16px;
-  border-radius: 12px;
-  border: none;
-  cursor: pointer;
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent1), var(--accent2));
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-  transition: transform 0.15s ease;
-}
-button:hover {
-  transform: translateY(-2px);
-}
+.actions{display:flex;gap:12px;flex-wrap:wrap}
+button{padding:12px 16px;border:none;border-radius:14px;cursor:pointer;font-weight:800;background:linear-gradient(135deg,#fff,#f8f8ff);box-shadow:var(--shadow)}
+button.primary{color:white;background:linear-gradient(135deg,#8b5cf6,#7c3aed)}
+button.ghost{background:linear-gradient(135deg,#ffffff,#f7f7ff);border:1px solid #eee}
+button.big{font-size:16px} button.small{font-size:12px}
+button.danger{color:white;background:linear-gradient(135deg,#f87171,#ef4444)}
+
+.panel.glass{margin:16px 0}
+
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+input{padding:12px 12px;border-radius:12px;border:1px solid #ececff;background:#fff;min-width:220px}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.label{color:var(--muted);font-weight:700}
+.code{font-size:34px;font-weight:900;letter-spacing:2px}
+.muted{color:var(--muted)} .small{font-size:12px}
+
+.peers{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px}
+.peer{width:96px;height:96px;border-radius:50%;display:grid;place-items:center;position:relative;
+  background:linear-gradient(135deg,#ede9fe,#ddd6fe);color:#3b0764;font-weight:900;font-size:22px;
+  box-shadow:var(--shadow);border:1px solid #f1edff;user-select:none;transition:transform .15s ease, box-shadow .2s ease;text-align:center;padding:6px}
+.peer:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(0,0,0,.1)}
+.peer .name{position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--muted)}
+.peer.drop{outline:2px solid #22c55e} .peer.me{outline:2px dashed #06b6d4}
+
+.file{position:relative;overflow:hidden;display:inline-flex}
+.file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.file span{padding:10px 12px;border-radius:12px;background:#f9f7ff;border:1px solid #ececff}
+
+.progress{height:12px;border-radius:999px;overflow:hidden;background:#efeafe}
+.progress-bar{height:100%;width:0;background:linear-gradient(90deg,#22c55e,#10b981);transition:width .1s linear}
+#runway,#runwayLocal{height:3px;background:repeating-linear-gradient(90deg,#e9d5ff 0 34px,#fecaca 34px 38px);border-radius:999px;margin:6px 0 8px;position:relative;overflow:hidden}
+#jet,#jetLocal{position:absolute;top:-8px;left:-24px;font-size:20px;animation:none}
+.takeoff{animation:fly 1.6s ease-in-out forwards}
+@keyframes fly{from{left:-24px;transform:translateY(0)}50%{transform:translateY(-6px)}to{left:100%;transform:translateY(0)}}
+
+.modebar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0}
+.switch{position:relative;display:inline-block;width:56px;height:32px}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;cursor:pointer;inset:0;background:linear-gradient(135deg,#ede9fe,#fff);border-radius:999px;box-shadow:inset 0 2px 6px rgba(0,0,0,.08);transition:.2s}
+.slider:before{content:"";position:absolute;height:24px;width:24px;left:4px;bottom:4px;background:white;border-radius:50%;box-shadow:var(--shadow);transition:.2s}
+input:checked + .slider{background:linear-gradient(135deg,#fff,#ede9fe)}
+input:checked + .slider:before{transform:translateX(24px)}
+
+.center{text-align:center} .hidden{display:none !important}
+
+.corner-rocket{position:fixed;right:12px;bottom:10px;font-size:22px;opacity:.85;animation:float 8s ease-in-out infinite alternate;cursor:pointer}
+
+/* Chat */
+.fab.chat{position:fixed;right:16px;bottom:70px;border-radius:999px;width:56px;height:56px;display:grid;place-items:center;font-size:22px}
+.chat-panel{position:fixed;right:16px;bottom:136px;width:320px;max-width:92vw;background:#ffffffee;border-radius:18px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden;backdrop-filter:blur(8px);border:1px solid #f0f0ff}
+.chat-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f6f3ff;border-bottom:1px solid #ececff}
+.chat-body{padding:10px;max-height:40vh;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.msg{padding:8px 10px;border-radius:12px;background:#f6f3ff;border:1px solid #ececff;max-width:80%}
+.msg.me{align-self:flex-end;background:#dcfce7;border-color:#86efac}
+.chat-foot{display:flex;gap:6px;padding:10px;border-top:1px solid #ececff}
+
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.2);display:grid;place-items:center}
+.modal-card{border-radius:18px;box-shadow:var(--shadow);width:520px;max-width:92vw;overflow:hidden}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#f6f3ff;border-bottom:1px solid #ececff}
+.modal-body{padding:14px}
+.modal-foot{display:flex;justify-content:flex-end;padding:12px 14px;background:#f6f3ff;border-top:1px solid #ececff}
+.tag-muted{color:#6d28d9}
+
+/* Fix any glossy overlay blocking inputs in online panel */
+#onlinePanel.card:after { display:none !important; }
+#onlinePanel .row { position:relative; z-index:5; }
+#onlinePanel input, #onlinePanel button { position:relative; z-index:10; pointer-events:auto; background:#fff; }
+#onlinePanel input:focus { outline:2px solid #a78bfa; }
