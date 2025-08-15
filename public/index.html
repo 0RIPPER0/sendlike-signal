@@ -1,34 +1,84 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>SendLike</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<div class="bg-grid"></div>
-
+<div class="bg-gradient"></div>
 <div class="container">
-  <header>
-    <h1>SendLike</h1>
+  <header class="hero">
+    <div class="brand">
+      <div class="logo">💜</div>
+      <div class="title">SendLike</div>
+    </div>
+    <div class="mode-toggle">
+      <span>Local</span>
+      <label class="switch">
+        <input type="checkbox" id="modeSwitch" />
+        <span class="slider"></span>
+      </label>
+      <span>Online</span>
+    </div>
   </header>
 
   <div class="cards">
-    <div class="card">
-      <h3>Your Name</h3>
-      <input type="text" placeholder="Enter your name">
-      <button>Save</button>
+    <!-- Host / Join Panel -->
+    <div class="card" id="hostPanel">
+      <h3>Host a Group</h3>
+      <div class="row">
+        <input type="text" id="hostName" placeholder="Your name" />
+        <button class="primary">Create Group</button>
+      </div>
+      <p class="label">Your Group Code:</p>
+      <p class="code" id="hostCode">------</p>
     </div>
 
-    <div class="card">
-      <h3>Send Message</h3>
-      <input type="text" placeholder="Message">
-      <button>Send</button>
+    <div class="card" id="joinPanel">
+      <h3>Join a Group</h3>
+      <div class="row">
+        <input type="text" id="joinName" placeholder="Your name" />
+      </div>
+      <div class="row">
+        <input type="text" id="joinCode" placeholder="6-digit code" maxlength="6" />
+        <button>Join</button>
+      </div>
     </div>
+
+    <!-- Host Dashboard -->
+    <div class="card" id="dashboardPanel">
+      <h3>Host Dashboard</h3>
+      <ul id="memberList">
+        <li>No members yet</li>
+      </ul>
+      <div class="row">
+        <input type="text" id="sendMessage" placeholder="Message" />
+        <button>Send to All</button>
+      </div>
+      <button class="danger">Disband Group</button>
+    </div>
+  </div>
+
+  <footer class="footer">
+    Made by <strong>Your Name</strong> 🤝 with a little help from ChatGPT
+  </footer>
+</div>
+
+<!-- Floating Chat Bubble -->
+<div class="chat-bubble" id="chatBubble">💬</div>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-header">
+    <span>Group Chat</span>
+    <button id="closeChat">✖</button>
+  </div>
+  <div class="chat-messages" id="chatMessages"></div>
+  <div class="chat-input">
+    <input type="text" id="chatText" placeholder="Type a message..." />
+    <button id="sendChat">Send</button>
   </div>
 </div>
 
-<script src="script.js"></script>
 </body>
 </html>
