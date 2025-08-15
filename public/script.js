@@ -234,3 +234,44 @@ socket.on('groupDisbanded', (reason) => {
 // Boot
 // ------------------------------
 window.addEventListener('load', startLanding);
+
+/* ================================
+   FIX: Chat Toggle Open/Close
+================================ */
+chatFab.addEventListener('click', () => {
+  chatBox.hidden = !chatBox.hidden;
+  if (!chatBox.hidden) chatDot.hidden = true;
+});
+chatClose.addEventListener('click', () => {
+  chatBox.hidden = true;
+});
+
+/* ================================
+   FIX: Send Chat (no double echo)
+================================ */
+function sendChat() {
+  const text = (chatInput.value || '').trim();
+  if (!text || !currentRoom) return;
+
+  // Show locally ONLY ONCE
+  appendMsg({ you: true, name: myName || 'Me', text });
+
+  // Tell server (server should broadcast to others, but NOT back to sender)
+  socket.emit('chat', { room: currentRoom, name: myName || 'Guest', text });
+
+  chatInput.value = '';
+}
+
+sendChatBtn.addEventListener('click', sendChat);
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendChat();
+});
+
+/* ================================
+   Incoming chat (from others only)
+   NOTE: Server must NOT emit back to sender
+================================ */
+socket.on('chat', ({ name, text }) => {
+  if (name === myName) return; // ignore my own messages
+  appendMsg({ name: name || 'Guest', text: text || '' });
+});
