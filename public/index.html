@@ -4,20 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SendLike</title>
-
-  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-
-  <!-- Main CSS -->
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-
-  <!-- =======================
-       LANDING PAGE
-  ======================= -->
   <div id="landing">
     <h1>
       Fast enough to make your WIFI blush...<br>
@@ -26,13 +18,7 @@
       <span class="contrail"></span>
     </h1>
   </div>
-
-  <!-- =======================
-       MAIN CONTAINER
-  ======================= -->
   <div class="container" style="display:none;">
-
-    <!-- HEADER -->
     <header>
       <h1>
         <img src="icon.png" alt="SendLike Logo">
@@ -40,8 +26,6 @@
       </h1>
       <button onclick="showAbout()">About</button>
     </header>
-
-    <!-- MODE TOGGLE -->
     <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
       <div>
         <label>
@@ -60,10 +44,6 @@
         </select>
       </div>
     </div>
-
-    <!-- =======================
-         JOIN GROUP SECTION
-    ======================= -->
     <div class="card">
       <h2>Online (with Code)</h2>
       <div style="display: grid; gap: 1rem;">
@@ -72,10 +52,6 @@
         <button id="joinBtn">Join Group</button>
       </div>
     </div>
-
-    <!-- =======================
-         CREATE GROUP SECTION
-    ======================= -->
     <div class="card">
       <h2>Create a New Group</h2>
       <div style="display: grid; gap: 1rem;">
@@ -83,10 +59,6 @@
         <button id="createBtn">Create Group</button>
       </div>
     </div>
-
-    <!-- =======================
-         CHAT SECTION
-    ======================= -->
     <div id="chatSection" class="card" style="display:none;">
       <h2>Group Chat</h2>
       <div id="chatMessages" style="height:200px; overflow-y:auto; background:rgba(255,255,255,0.3); border-radius:10px; padding:1rem; margin-bottom:1rem;"></div>
@@ -95,51 +67,8 @@
         <button id="sendChatBtn">Send</button>
       </div>
     </div>
-
   </div>
-
-  <!-- =======================
-       SCRIPTS
-  ======================= -->
   <script src="/socket.io/socket.io.js"></script>
   <script src="script.js"></script>
-
-  <script>
-    // Landing page fade and plane loop
-    function startLandingAnimation() {
-      const landing = document.getElementById('landing');
-      const container = document.querySelector('.container');
-      
-      setTimeout(() => {
-        landing.style.opacity = '0';
-        setTimeout(() => {
-          landing.style.display = 'none';
-          container.style.display = 'grid';
-        }, 1000);
-      }, 2500);
-    }
-
-    // Loop plane animation every few seconds
-    function loopPlaneAnimation() {
-      const plane = document.querySelector('.plane');
-      const contrail = document.querySelector('.contrail');
-      plane.style.animation = 'none';
-      contrail.style.animation = 'none';
-      plane.offsetHeight; // reset animation
-      contrail.offsetHeight;
-      plane.style.animation = 'planeCurve 1.5s ease-in forwards';
-      contrail.style.animation = 'contrailFade 1.5s ease-in forwards';
-    }
-
-    window.addEventListener('load', () => {
-      startLandingAnimation();
-      loopPlaneAnimation();
-      setInterval(loopPlaneAnimation, 4000); // repeat every 4 seconds
-    });
-
-    function showAbout() {
-      alert("SendLike - Simple P2P sharing via code or local network.");
-    }
-  </script>
 </body>
 </html>

@@ -1,10 +1,5 @@
-/* Reset & Base */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
+/* Reset */
+* { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   font-family: 'Inter', sans-serif;
   background: #d6c6f4;
@@ -13,89 +8,38 @@ body {
   justify-content: center;
   align-items: flex-start;
   padding: 2rem;
-  color: #222;
   overflow-x: hidden;
 }
-
-/* Layered Background Animation */
-body::before,
-body::after {
+body::before, body::after {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -2;
 }
-
-/* Spirals */
 body::before {
   background: conic-gradient(from 0deg, rgba(255,255,255,0.05) 0deg, transparent 120deg);
   animation: rotate 40s linear infinite;
 }
-@keyframes rotate {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Grid overlay */
+@keyframes rotate { 0% { transform: rotate(0deg);} 100% { transform: rotate(360deg);} }
 body::after {
-  background-image:
-    linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+  background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
   background-size: 50px 50px;
   animation: shift 20s linear infinite;
 }
-@keyframes shift {
-  0% { background-position: 0 0, 0 0; }
-  100% { background-position: 50px 50px, 50px 50px; }
-}
-
-/* Layout Container */
-.container {
-  display: grid;
-  gap: 1.5rem;
-  max-width: 600px;
-  width: 100%;
-}
-
-/* Header */
-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-header h1 {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 1.5rem;
-}
-header img {
-  width: 40px;
-  height: 40px;
-}
-
-/* Glass Cards */
+@keyframes shift { 0% { background-position: 0 0;} 100% { background-position: 50px 50px;} }
+.container { display: grid; gap: 1.5rem; max-width: 600px; width: 100%; }
+header { display: flex; justify-content: space-between; align-items: center; }
+header h1 { display: flex; align-items: center; gap: 0.5rem; font-size: 1.5rem; }
+header img { width: 40px; height: 40px; }
 .card {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255,255,255,0.25);
   backdrop-filter: blur(14px);
   border-radius: 16px;
   padding: 1.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255,255,255,0.3);
   box-shadow: 0 4px 30px rgba(0,0,0,0.1);
 }
-
-/* Form Alignment */
-.form-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-.form-row input {
-  flex: 1;
-}
-
-/* Inputs */
 input, select {
   padding: 0.7rem;
   border-radius: 10px;
@@ -103,144 +47,36 @@ input, select {
   background: rgba(255,255,255,0.5);
   backdrop-filter: blur(5px);
   font-size: 1rem;
-  outline: none;
 }
-
-/* Buttons - Glass Gradient Hover & Ripple */
 button {
-  position: relative;
   padding: 0.7rem 1.5rem;
   border: none;
   border-radius: 12px;
-  background: linear-gradient(135deg, rgba(180, 120, 255, 0.2), rgba(255, 255, 255, 0.1));
-  color: white;
+  background: linear-gradient(135deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1));
   font-weight: 600;
   cursor: pointer;
-  overflow: hidden;
   transition: all 0.3s ease;
 }
-button:hover {
-  background: linear-gradient(135deg, rgba(160, 90, 255, 0.6), rgba(100, 50, 180, 0.6));
-  box-shadow: 0 4px 20px rgba(160, 90, 255, 0.5);
-  transform: translateY(-1px);
-}
-button:active {
-  transform: scale(0.98);
-}
-
-/* Ripple Effect */
-button::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  background: rgba(255,255,255,0.4);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  transition: width 0.4s ease, height 0.4s ease;
-}
-button:active::after {
-  width: 200%;
-  height: 200%;
-}
-
-/* Toggle Switch */
-.toggle {
-  position: relative;
-  display: inline-block;
-  width: 50px;
-  height: 26px;
-}
-.toggle input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-color: rgba(200, 200, 200, 0.3);
-  transition: .4s;
-  border-radius: 26px;
-}
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 20px;
-  width: 20px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: .4s;
-  border-radius: 50%;
-}
-input:checked + .slider {
-  background-color: rgba(150, 80, 255, 0.6);
-}
-input:checked + .slider:before {
-  transform: translateX(24px);
-}
-
-/* Responsive */
-@media (max-width: 500px) {
-  .container {
-    padding: 1rem;
-  }
-}
-/* Landing Page */
+button:hover { background: linear-gradient(135deg, rgba(255,255,255,0.6), rgba(255,255,255,0.3)); }
 #landing {
-  position: fixed;
-  inset: 0;
+  position: fixed; inset: 0;
   background: linear-gradient(135deg, #a18cd1, #fbc2eb);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  transition: opacity 1s ease;
-  overflow: hidden;
+  display: flex; justify-content: center; align-items: center;
+  z-index: 1000; transition: opacity 1s ease;
+  text-align: center; color: white; padding: 2rem;
 }
-
-#landing h1 {
-  font-size: 1.8rem;
-  max-width: 90%;
-  text-align: center;
-  color: white;
-  margin-bottom: 1rem;
-  position: relative;
-}
-
-.plane {
-  font-size: 2rem;
-  display: inline-block;
-}
-
+.plane { font-size: 2rem; animation: planeCurve 1.5s ease-in forwards; }
 .contrail {
-  position: absolute;
-  width: 320px;
-  height: 80px;
-  background: none;
+  position: absolute; width: 320px; height: 80px;
   border-top: 3px solid rgba(255,255,255,0.7);
-  border-radius: 50% 50% 0 0;
-  top: 50%;
-  left: calc(50% - 160px);
-  transform-origin: left center;
+  border-radius: 50% 50% 0 0; top: 50%;
+  left: calc(50% - 160px); animation: contrailFade 1.5s ease-in forwards;
 }
-
-/* Keyframes */
 @keyframes planeCurve {
-  0% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
-  40% { transform: translate(120px, -20px) rotate(10deg) scale(1); opacity: 1; }
-  80% { transform: translate(240px, -60px) rotate(18deg) scale(0.9); opacity: 0.9; }
+  0% { transform: translate(0,0) rotate(0deg) scale(1); opacity: 1;}
   100% { transform: translate(320px, -120px) rotate(25deg) scale(0.8); opacity: 0; }
 }
-
 @keyframes contrailFade {
   0% { opacity: 0.7; transform: scaleX(0); }
-  30% { transform: scaleX(1); opacity: 0.6; }
-  80% { opacity: 0.3; }
   100% { opacity: 0; transform: scaleX(1.2); }
 }
