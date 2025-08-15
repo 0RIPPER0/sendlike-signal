@@ -5,27 +5,35 @@ const socket = io();
 
 // --- DOM Elements ---
 const modeSwitch = document.getElementById("modeSwitch");
+const modeLabel = document.getElementById("modeLabel");
+
 const joinBtn = document.getElementById("joinBtn");
 const createBtn = document.getElementById("createBtn");
-const sendChatBtn = document.getElementById("sendChatBtn");
 
 const nameOnline = document.getElementById("nameOnline");
 const joinCode = document.getElementById("joinCode");
 const nameHost = document.getElementById("nameHost");
+
 const chatInput = document.getElementById("chatInput");
 const chatMessages = document.getElementById("chatMessages");
-const chatSection = document.getElementById("chatSection");
+
+const chatToggleBtn = document.getElementById("chatToggleBtn");
+const chatNotifDot = document.getElementById("chatNotifDot");
+const chatBox = document.getElementById("chatBox");
+
+const sendChatBtn = document.getElementById("sendChatBtn");
 
 let currentRoom = null;
 let hostId = null;
+let chatOpen = false;
 
 // ================================
 //  MODE SWITCH
 // ================================
 modeSwitch.addEventListener("change", () => {
-  modeSwitch.previousSibling.textContent = modeSwitch.checked
-    ? "📡 Local Mode "
-    : "🌐 Online Mode ";
+  modeLabel.textContent = modeSwitch.checked
+    ? "모 Local Mode"
+    : "ᯤ Online Mode";
 });
 
 // ================================
@@ -39,7 +47,7 @@ createBtn.addEventListener("click", () => {
     currentRoom = code;
     hostId = hId;
     alert(`Group created! Code: ${code}`);
-    chatSection.style.display = "block";
+    openChat();
   });
 });
 
@@ -57,26 +65,34 @@ joinBtn.addEventListener("click", () => {
     currentRoom = code;
     hostId = res.hostId;
     alert(`Joined group: ${code}`);
-    chatSection.style.display = "block";
+    openChat();
   });
 });
 
 // ================================
-//  CHAT MESSAGES
+//  SEND CHAT MESSAGE
 // ================================
 sendChatBtn.addEventListener("click", () => {
   const text = chatInput.value.trim();
   if (!text || !currentRoom) return;
 
-  socket.emit("chat", { room: currentRoom, name: nameOnline.value || nameHost.value, text });
+  const name = nameOnline.value || nameHost.value;
+  socket.emit("chat", { room: currentRoom, name, text });
   chatInput.value = "";
 });
 
+// ================================
+//  RECEIVE CHAT MESSAGE
+// ================================
 socket.on("chat", ({ name, text }) => {
   const msg = document.createElement("div");
   msg.textContent = `${name}: ${text}`;
   chatMessages.appendChild(msg);
   chatMessages.scrollTop = chatMessages.scrollHeight;
+
+  if (!chatOpen) {
+    chatNotifDot.style.display = "block"; // Show red dot if chat closed
+  }
 });
 
 // ================================
@@ -91,7 +107,29 @@ socket.on("updateMembers", (members) => {
 // ================================
 socket.on("groupDisbanded", (reason) => {
   alert(`Group closed: ${reason}`);
-  chatSection.style.display = "none";
+  closeChat();
   currentRoom = null;
   hostId = null;
 });
+
+// ================================
+//  CHAT TOGGLE LOGIC
+// ================================
+chatToggleBtn.addEventListener("click", () => {
+  if (chatOpen) {
+    closeChat();
+  } else {
+    openChat();
+  }
+});
+
+function openChat() {
+  chatBox.style.display = "flex";
+  chatNotifDot.style.display = "none";
+  chatOpen = true;
+}
+
+function closeChat() {
+  chatBox.style.display = "none";
+  chatOpen = false;
+}
