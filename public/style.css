@@ -180,3 +180,26 @@ input:checked + .slider:before { transform: translateX(26px); }
   justify-content:center; align-items:center; text-align:center;
 }
 #dropOverlay.show { display:flex; }
+
+/* =======================
+   File Transfer Progress
+======================= */
+.transfer-progress {
+  margin-top: 6px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  height: 8px;
+  overflow: hidden;
+  position: relative;
+}
+.transfer-progress-bar {
+  background: var(--accent);
+  height: 100%;
+  width: 0%;
+  transition: width 0.2s linear;
+}
+.transfer-info {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 3px;
+}
