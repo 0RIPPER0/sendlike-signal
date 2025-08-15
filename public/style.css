@@ -180,3 +180,13 @@ input:checked + .slider:before { transform: translateX(26px); }
   justify-content:center; align-items:center; text-align:center;
 }
 #dropOverlay.show { display:flex; }
+
+/* Hide online join/create cleanly */
+#onlineControls[hidden] {
+  display: none !important;
+}
+
+/* Optional: tweak top padding so People list moves up */
+#peopleCard {
+  margin-top: 0;
+}
