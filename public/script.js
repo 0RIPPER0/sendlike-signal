@@ -190,16 +190,10 @@ createBtn.addEventListener('click', () => {
 
   myName = name;
   socket.emit('createGroup', { name, ttlMinutes: 10 }, ({ code, hostId: hId, openShare: os }) => {
-    currentRoom = code; 
-    hostId = hId; 
-    isHost = true; 
-    openShare = !!os;
+    currentRoom = code; hostId = hId; isHost = true; openShare = !!os;
+    // do NOT fill code into join input (requested)
     setSessionUI({ code, roleText: 'Host', statusText: 'Active' });
     peopleTitle.textContent = 'Members';
-
-    // Host keeps "Join" hidden, but we leave Create hidden too since group is already made
-    cardOnlineJoin.hidden = true;
-    cardOnlineCreate.hidden = true;
   });
 });
 
@@ -211,16 +205,9 @@ joinBtn.addEventListener('click', () => {
   myName = name;
   socket.emit('joinGroup', { name, code }, (res) => {
     if (res.error) return alert(res.error);
-    currentRoom = code; 
-    hostId = res.hostId; 
-    isHost = false; 
-    openShare = !!res.openShare;
+    currentRoom = code; hostId = res.hostId; isHost = false; openShare = !!res.openShare;
     setSessionUI({ code, roleText: 'Member', statusText: 'Active' });
     peopleTitle.textContent = 'Members';
-
-    // 🔹 Hide join/create UI for members to prevent spam
-    cardOnlineJoin.hidden = true;
-    cardOnlineCreate.hidden = true;
   });
 });
 
@@ -352,83 +339,13 @@ async function sendFilesTo(targetId, files) {
   const room = MODE_LOCAL ? null : (currentRoom || null);
 
   for (const file of files) {
-    const fileId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const fileId = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
     const cBytes = chunkSize();
-
     socket.emit('fileMeta', {
-      targetId,
-      room,
-      fileId,
-      name: file.name,
-      size: file.size,
-      mime: file.type || 'application/octet-stream',
+      targetId, room, fileId,
+      name: file.name, size: file.size, mime: file.type || 'application/octet-stream',
       chunkBytes: cBytes
     });
-
-    // --- Progress UI ---
-    const progressElem = document.createElement('div');
-    progressElem.className = 'progressItem';
-    progressElem.innerHTML = `
-      <div><strong>${file.name}</strong> <span class="percent">0%</span> (<span class="speed">0 MB/s</span>)</div>
-      <div class="barWrap"><div class="bar"></div></div>
-    `;
-    document.body.appendChild(progressElem); // You can append to a nicer container if you want
-    const bar = progressElem.querySelector('.bar');
-    const percentSpan = progressElem.querySelector('.percent');
-    const speedSpan = progressElem.querySelector('.speed');
-
-    let offset = 0;
-    let seq = 0;
-    let lastTime = Date.now();
-    let bytesThisSecond = 0;
-
-    while (offset < file.size) {
-      const end = Math.min(offset + cBytes, file.size);
-      const chunk = await file.slice(offset, end).arrayBuffer();
-
-      socket.emit('fileChunk', { targetId, fileId, seq, chunk });
-
-      offset = end;
-      seq++;
-      bytesThisSecond += chunk.byteLength;
-
-      // --- Update progress ---
-      const percent = ((offset / file.size) * 100).toFixed(1);
-      bar.style.width = `${percent}%`;
-      percentSpan.textContent = `${percent}%`;
-
-      // Speed calc every second
-      const now = Date.now();
-      if (now - lastTime >= 1000) {
-        const speedMBs = (bytesThisSecond / (1024 * 1024)).toFixed(2);
-        speedSpan.textContent = `${speedMBs} MB/s`;
-        bytesThisSecond = 0;
-        lastTime = now;
-      }
-
-      // Small delay to prevent overload
-      await new Promise(r => setTimeout(r, MODE_LOCAL ? 2 : 0));
-    }
-
-    socket.emit('fileComplete', { targetId, fileId });
-
-    // Finalize
-    bar.style.width = '100%';
-    percentSpan.textContent = '100%';
-    speedSpan.textContent = 'Done';
-  }
-}
-
-    // slice & send
-    let offset = 0, seq = 0;
-    while (offset < file.size) {
-      const end = Math.min(offset + cBytes, file.size);
-      const chunk = await file.slice(offset, end).arrayBuffer();
-      socket.emit('fileChunk', { targetId, fileId, seq, chunk });
-      offset = end; seq++;
-    }
-    socket.emit('fileComplete', { targetId, fileId });
-  }
 }
 
 /* Receiving */
