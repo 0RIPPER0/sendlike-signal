@@ -15,7 +15,7 @@ const io = new Server(server, { cors: { origin: "*" } });
 // ================================
 //  STATIC FILES
 // ================================
-app.use(express.static(path.join(__dirname, ".")));
+app.use(express.static(path.join(__dirname, "public")));
 
 // ================================
 //  IN-MEMORY GROUP STORE
