@@ -1,68 +1,63 @@
-/* ---- Background: soft grid + spirals ---- */
-body {
+/* Reset & Base */
+* {
   margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
   font-family: 'Inter', sans-serif;
-  color: #222;
-  background-color: #f8f8fa;
+  background: #d6c6f4;
   min-height: 100vh;
   display: flex;
   justify-content: center;
   align-items: flex-start;
   padding: 2rem;
-  background-image:
-    radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.8) 0%, transparent 60%),
-    radial-gradient(circle at 80% 30%, rgba(255, 255, 255, 0.4) 0%, transparent 70%),
-    repeating-linear-gradient(
-      0deg,
-      rgba(255, 255, 255, 0.06),
-      rgba(255, 255, 255, 0.06) 1px,
-      transparent 1px,
-      transparent 40px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.06),
-      rgba(255, 255, 255, 0.06) 1px,
-      transparent 1px,
-      transparent 40px
-    );
-  background-size: cover;
+  color: #222;
   overflow-x: hidden;
 }
 
-/* Subtle spirals */
-body::before {
+/* Layered Background Animation */
+body::before,
+body::after {
   content: "";
   position: fixed;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: repeating-radial-gradient(circle, rgba(255,255,255,0.1) 0px, rgba(255,255,255,0.1) 1px, transparent 1px, transparent 80px);
-  animation: spin 200s linear infinite;
-  z-index: 0;
+  inset: 0;
+  z-index: -2;
 }
-@keyframes spin {
+
+/* Spirals */
+body::before {
+  background: conic-gradient(from 0deg, rgba(255,255,255,0.05) 0deg, transparent 120deg);
+  animation: rotate 40s linear infinite;
+}
+@keyframes rotate {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
 
-/* ---- Layout ---- */
-.container {
-  position: relative;
-  z-index: 1;
-  max-width: 900px;
-  width: 100%;
-  background: rgba(255,255,255,0.65);
-  backdrop-filter: blur(12px);
-  border-radius: 20px;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.08);
-  padding: 2rem;
-  display: grid;
-  gap: 1.5rem;
+/* Grid overlay */
+body::after {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+  background-size: 50px 50px;
+  animation: shift 20s linear infinite;
+}
+@keyframes shift {
+  0% { background-position: 0 0, 0 0; }
+  100% { background-position: 50px 50px, 50px 50px; }
 }
 
-/* ---- Header ---- */
+/* Layout Container */
+.container {
+  display: grid;
+  gap: 1.5rem;
+  max-width: 600px;
+  width: 100%;
+}
+
+/* Header */
 header {
   display: flex;
   justify-content: space-between;
@@ -72,52 +67,75 @@ header h1 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-weight: 700;
+  font-size: 1.5rem;
 }
 header img {
   width: 40px;
   height: 40px;
 }
 
-/* ---- Inputs & Buttons ---- */
-input, select {
-  padding: 0.75rem;
-  border-radius: 10px;
-  border: 1px solid rgba(0,0,0,0.1);
-  font-size: 1rem;
-  outline: none;
-  background: rgba(255,255,255,0.7);
-  transition: all 0.3s ease;
-}
-input:focus, select:focus {
-  border-color: rgba(0,0,0,0.3);
-  background: rgba(255,255,255,0.85);
+/* Glass Cards */
+.card {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(14px);
+  border-radius: 16px;
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 30px rgba(0,0,0,0.1);
 }
 
-/* Glass gradient button */
+/* Inputs */
+input, select {
+  padding: 0.7rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.5);
+  backdrop-filter: blur(5px);
+  font-size: 1rem;
+}
+
+/* Buttons - Glass Gradient Hover & Ripple */
 button {
-  padding: 0.75rem 1.5rem;
+  position: relative;
+  padding: 0.7rem 1.5rem;
   border: none;
   border-radius: 12px;
-  font-size: 1rem;
+  background: linear-gradient(135deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1));
+  color: #222;
   font-weight: 600;
   cursor: pointer;
-  color: white;
-  background: linear-gradient(135deg, rgba(99,102,241,0.85), rgba(236,72,153,0.85));
-  backdrop-filter: blur(8px);
+  overflow: hidden;
   transition: all 0.3s ease;
 }
 button:hover {
-  background: linear-gradient(135deg, rgba(236,72,153,0.9), rgba(99,102,241,0.9));
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(99,102,241,0.3);
+  background: linear-gradient(135deg, rgba(255,255,255,0.6), rgba(255,255,255,0.3));
+  transform: translateY(-1px);
+}
+button:active {
+  transform: scale(0.98);
 }
 
-/* ---- Card style ---- */
-.card {
-  padding: 1.5rem;
-  border-radius: 16px;
-  background: rgba(255,255,255,0.65);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 4px 30px rgba(0,0,0,0.05);
+/* Ripple Effect */
+button::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(255,255,255,0.4);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 0.4s ease, height 0.4s ease;
+}
+button:active::after {
+  width: 200%;
+  height: 200%;
+}
+
+/* Responsive */
+@media (max-width: 500px) {
+  .container {
+    padding: 1rem;
+  }
 }
