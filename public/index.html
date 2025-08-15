@@ -4,14 +4,210 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SendLike</title>
-  <link rel="stylesheet" href="style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* Reset & Base */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #d6c6f4;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 2rem;
+      color: #222;
+      overflow-x: hidden;
+    }
+
+    /* Layered Background Animation */
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+    }
+    body::before {
+      background: conic-gradient(from 0deg, rgba(255,255,255,0.05) 0deg, transparent 120deg);
+      animation: rotate 40s linear infinite;
+    }
+    @keyframes rotate {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    body::after {
+      background-image:
+        linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+      background-size: 50px 50px;
+      animation: shift 20s linear infinite;
+    }
+    @keyframes shift {
+      0% { background-position: 0 0, 0 0; }
+      100% { background-position: 50px 50px, 50px 50px; }
+    }
+
+    /* Layout Container */
+    .container {
+      display: grid;
+      gap: 1.5rem;
+      max-width: 600px;
+      width: 100%;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 1.5rem;
+    }
+    header img {
+      width: 40px;
+      height: 40px;
+    }
+
+    /* Glass Cards */
+    .card {
+      background: rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(14px);
+      border-radius: 16px;
+      padding: 1.5rem;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      box-shadow: 0 4px 30px rgba(0,0,0,0.1);
+    }
+
+    /* Inputs */
+    input, select {
+      padding: 0.7rem;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.4);
+      background: rgba(255,255,255,0.5);
+      backdrop-filter: blur(5px);
+      font-size: 1rem;
+    }
+
+    /* Buttons - Glass Gradient Hover & Ripple */
+    button {
+      position: relative;
+      padding: 0.7rem 1.5rem;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1));
+      color: #222;
+      font-weight: 600;
+      cursor: pointer;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+    button:hover {
+      background: linear-gradient(135deg, rgba(255,255,255,0.6), rgba(255,255,255,0.3));
+      transform: translateY(-1px);
+    }
+    button:active {
+      transform: scale(0.98);
+    }
+    button::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      background: rgba(255,255,255,0.4);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      transition: width 0.4s ease, height 0.4s ease;
+    }
+    button:active::after {
+      width: 200%;
+      height: 200%;
+    }
+
+    /* Landing Page */
+    #landing {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #a18cd1, #fbc2eb);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      transition: opacity 1s ease;
+      overflow: hidden;
+    }
+    #landing h1 {
+      font-size: 1.8rem;
+      max-width: 90%;
+      text-align: center;
+      color: white;
+      margin-bottom: 1rem;
+      position: relative;
+    }
+
+    .plane {
+      font-size: 2rem;
+      display: inline-block;
+      animation: planeCurve 1.5s ease-in forwards;
+    }
+
+    /* Contrail */
+    .contrail {
+      position: absolute;
+      width: 320px;
+      height: 80px;
+      background: none;
+      border-top: 3px solid rgba(255,255,255,0.7);
+      border-radius: 50% 50% 0 0;
+      top: 50%;
+      left: calc(50% - 160px);
+      transform-origin: left center;
+      animation: contrailFade 1.5s ease-in forwards;
+    }
+
+    @keyframes planeCurve {
+      0% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+      40% { transform: translate(120px, -20px) rotate(10deg) scale(1); opacity: 1; }
+      80% { transform: translate(240px, -60px) rotate(18deg) scale(0.9); opacity: 0.9; }
+      100% { transform: translate(320px, -120px) rotate(25deg) scale(0.8); opacity: 0; }
+    }
+
+    @keyframes contrailFade {
+      0% { opacity: 0.7; transform: scaleX(0); }
+      30% { transform: scaleX(1); opacity: 0.6; }
+      80% { opacity: 0.3; }
+      100% { opacity: 0; transform: scaleX(1.2); }
+    }
+
+    @media (max-width: 500px) {
+      .container { padding: 1rem; }
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    
+
+  <!-- Landing Page -->
+  <div id="landing">
+    <h1>
+      Fast enough to make your WIFI blush...<br>
+      Because your file deserve a First Class 
+      <span class="plane">✈️</span>
+      <span class="contrail"></span>
+    </h1>
+  </div>
+
+  <!-- Main Container -->
+  <div class="container" style="display:none;">
     <!-- Header -->
     <header>
       <h1>
@@ -22,14 +218,13 @@
     </header>
 
     <!-- Mode Toggle -->
-    <div class="card form-row" style="justify-content: space-between;">
-      <div style="display: flex; align-items: center; gap: 10px;">
-        <span>🌐 Online Mode</span>
-        <label class="toggle">
-          <input type="checkbox" id="modeToggle">
-          <span class="slider"></span>
+    <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <label>
+          🌐 Online Mode
+          <input type="checkbox" id="modeToggle" style="margin: 0 10px;">
+          📡 Local Mode
         </label>
-        <span>📡 Local Mode</span>
       </div>
       <div>
         Session limit:
@@ -42,23 +237,21 @@
       </div>
     </div>
 
-    <!-- Join Group Section -->
+    <!-- Join Group -->
     <div class="card">
       <h2>Online (with Code)</h2>
-      <div class="form-row">
+      <div style="display: grid; gap: 1rem;">
         <input id="nameInput" type="text" placeholder="Your name">
         <input id="codeInput" type="text" placeholder="6-digit code" maxlength="6">
         <button onclick="joinGroup()">Join Group</button>
       </div>
     </div>
 
-    <!-- Create Group Section -->
+    <!-- Create Group -->
     <div class="card">
       <h2>Create a New Group</h2>
-      <div class="form-row" style="margin-bottom: 1rem;">
+      <div style="display: grid; gap: 1rem;">
         <input id="hostName" type="text" placeholder="Your name">
-      </div>
-      <div class="form-row">
         <button onclick="createGroup()">Create Group</button>
       </div>
     </div>
@@ -67,40 +260,35 @@
     <div id="chatSection" class="card" style="display:none;">
       <h2>Group Chat</h2>
       <div id="chatMessages" style="height:200px; overflow-y:auto; background:rgba(255,255,255,0.3); border-radius:10px; padding:1rem; margin-bottom:1rem;"></div>
-      <div class="form-row">
+      <div style="display:grid; grid-template-columns: 1fr auto; gap:1rem;">
         <input id="chatInput" type="text" placeholder="Type a message...">
         <button onclick="sendChat()">Send</button>
       </div>
     </div>
-
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
   <script>
+    // Landing fade-out
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        document.getElementById('landing').style.opacity = '0';
+        setTimeout(() => {
+          document.getElementById('landing').style.display = 'none';
+          document.querySelector('.container').style.display = 'grid';
+        }, 1000);
+      }, 2500);
+    });
+
     function showAbout() {
       alert("SendLike - Simple P2P sharing via code or local network.");
     }
+
+    // Mode toggle
+    document.getElementById('modeToggle').addEventListener('change', function () {
+      console.log(this.checked ? 'Local Mode' : 'Online Mode');
+    });
   </script>
-  <script>
-  function showAbout() {
-    alert("SendLike - Simple P2P sharing via code or local network.");
-  }
-
-  // Toggle Mode Switch
-  const modeToggle = document.getElementById("modeToggle");
-  const leftLabel = document.querySelector("#modeToggle").parentElement.previousElementSibling;
-  const rightLabel = document.querySelector("#modeToggle").parentElement.nextElementSibling;
-
-  modeToggle.addEventListener("change", () => {
-    if (modeToggle.checked) {
-      leftLabel.textContent = "📡 Local Mode";
-      rightLabel.textContent = "🌐 Online Mode";
-    } else {
-      leftLabel.textContent = "🌐 Online Mode";
-      rightLabel.textContent = "📡 Local Mode";
-    }
-  });
-</script>
 </body>
 </html>
