@@ -1,32 +1,164 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>SendLike Group</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SendLike — P2P Fast Share</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#fde68a">
+  <link rel="stylesheet" href="/style.css" />
 </head>
-<body>
-    <h1>SendLike</h1>
+<body class="peach">
+  <div class="bg-anim"></div>
 
-    <div id="startScreen">
-        <input id="nameInput" placeholder="Enter your name">
-        <button onclick="createGroup()">Create Group</button>
-        <br><br>
-        <input id="joinCodeInput" placeholder="Enter group code">
-        <button onclick="joinGroup()">Join Group</button>
+  <header class="hero">
+    <div class="brand">
+      <div class="logo">🚀</div>
+      <div class="title">SendLike</div>
+    </div>
+    <div class="actions-header">
+      <button id="installBtn" class="ghost small hidden">Install App</button>
+      <button id="aboutBtn" class="ghost small">About</button>
+    </div>
+  </header>
+
+  <section class="landing container">
+    <h1 class="tagline" id="tagline"></h1>
+    <p class="sub">Send files face-to-face or across the world. No cloud storage. Just fast, direct, private.</p>
+
+    <div class="cards">
+      <div class="card"><div class="em">🌐</div><h3>Online Mode</h3><p>Create a 6-digit code. Friends join. Send to one or everyone.</p></div>
+      <div class="card"><div class="em">📡</div><h3>Local Mode</h3><p>Same Wi-Fi? Devices discover each other automatically — no codes.</p></div>
+      <div class="card"><div class="em">🕒</div><h3>Session Timer</h3><p>5, 10, 15 minutes, or Unlimited. Auto-close when time’s up.</p></div>
     </div>
 
-    <div id="groupScreen" style="display:none;">
-        <h2>Group Code: <span id="groupCode"></span></h2>
-        <div id="membersList" class="members"></div>
-        <br>
-        <input type="file" id="fileInput">
-        <button onclick="sendFile()">Send File to All</button>
-        <br><br>
-        <button id="disbandBtn" style="display:none;" onclick="disbandGroup()">Disband Group</button>
+    <div class="actions">
+      <button id="startApp" class="primary big">Start Now</button>
+      <button id="howWorks" class="ghost big">How Local Mode Works</button>
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js"></script>
+    <footer class="footer muted small">Made with 🚀 by <b>Aparup Biswas</b> & <b>ChatGPT</b></footer>
+  </section>
+
+  <section class="how container hidden" id="howSection">
+    <h2>How Local Mode Works</h2>
+    <ol>
+      <li>Connect devices to the same Wi-Fi.</li>
+      <li>Open SendLike on both devices and toggle <b>Local Mode</b>.</li>
+      <li>Devices appear with cute names + IDs (e.g., “Golden Mango <b>(A3F2C1)</b>”).</li>
+      <li>Tap a device to connect, then drop a file to send.</li>
+    </ol>
+    <p class="muted small">Tip: If devices don’t see each other, ensure Wi-Fi doesn’t block device-to-device (AP isolation).</p>
+  </section>
+
+  <main class="app container hidden" id="app">
+    <div class="modebar">
+      <div class="switcher">
+        <span id="modeLabel">🌐 Online Mode</span>
+        <label class="switch"><input type="checkbox" id="modeSwitch"><span class="slider"></span></label>
+        <span>📡 Local Mode</span>
+      </div>
+      <div class="timerSelect">
+        <label>Session limit:</label>
+        <select id="ttlSelect">
+          <option value="5">5 min</option>
+          <option value="10" selected>10 min</option>
+          <option value="15">15 min</option>
+          <option value="0">Unlimited</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ONLINE -->
+    <section id="onlinePanel" class="panel card">
+      <h2>Online (with Code)</h2>
+      <div class="row"><input id="nameOnline" placeholder="Your name" /><button id="createBtn" class="primary">Create Group</button></div>
+      <div class="row"><input id="joinCode" placeholder="6-digit code" /><button id="joinBtn">Join Group</button></div>
+      <div id="onlineInfo" class="muted"></div>
+
+      <div id="groupArea" class="hidden">
+        <div class="grid">
+          <div class="code-card card soft">
+            <div class="label">Group Code</div>
+            <div id="groupCode" class="code"></div>
+            <div id="expires" class="muted small"></div>
+          </div>
+          <div class="send-card card soft">
+            <label class="file"><input type="file" id="fileOnline" /><span>Choose File</span></label>
+            <button id="sendAll" class="primary">Send to All</button>
+            <button id="disband" class="danger hidden">Disband</button>
+          </div>
+        </div>
+        <h3>People</h3>
+        <div id="peersOnline" class="peers"></div>
+        <p class="muted small">Drag a file onto a person to send only to them.</p>
+
+        <div id="progressWrap" class="hidden">
+          <div id="runway"><div id="jet">🛫</div></div>
+          <div id="progressTitle"></div>
+          <div class="progress"><div id="progressBar" class="progress-bar"></div></div>
+          <div id="speedLine" class="muted small"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LOCAL -->
+    <section id="localPanel" class="panel card hidden">
+      <h2>Local (same Wi-Fi, no codes)</h2>
+      <div class="row"><input id="nameLocal" placeholder="Your device name (e.g., Golden Mango)" /><button id="enterLocal" class="primary">Discover Devices</button><button id="leaveLocal" class="ghost hidden">Leave</button></div>
+      <div id="localInfo" class="muted">Devices on this Wi-Fi will appear below.</div>
+
+      <div id="localArea" class="hidden">
+        <div class="send-card card soft"><label class="file"><input type="file" id="fileLocal" /><span>Choose File</span></label><button id="sendAllLocal" class="primary">Send to All</button></div>
+        <h3>Devices</h3>
+        <div id="peersLocal" class="peers"></div>
+        <p class="muted small">Drag a file onto a device bubble to target only that device.</p>
+
+        <div id="progressWrapLocal" class="hidden">
+          <div id="runwayLocal"><div id="jetLocal">🛫</div></div>
+          <div id="progressTitleLocal"></div>
+          <div class="progress"><div id="progressBarLocal" class="progress-bar"></div></div>
+          <div id="speedLineLocal" class="muted small"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="disbanded" class="hidden center">
+      <h2>Group closed</h2>
+      <p id="disbandReason" class="muted">The host ended the session.</p>
+      <button onclick="location.reload()">Create/Join new group</button>
+    </section>
+
+    <footer class="footer muted small">© 2025 Aparup Biswas & ChatGPT</footer>
+  </main>
+
+  <!-- Floating Chat -->
+  <button class="fab chat" id="chatBtn">💬</button>
+  <div class="chat-panel hidden" id="chatPanel">
+    <div class="chat-head">Group Chat <button id="closeChat" class="ghost small">×</button></div>
+    <div class="chat-body" id="chatBody"></div>
+    <div class="chat-foot">
+      <input id="chatInput" placeholder="Type a message…" />
+      <button id="chatSend" class="primary">Send</button>
+    </div>
+  </div>
+
+  <div class="corner-rocket" title="About SendLike" id="cornerRocket">🚀</div>
+
+  <!-- About Modal -->
+  <div class="modal hidden" id="aboutModal">
+    <div class="modal-card">
+      <div class="modal-head"><span>🚀 SendLike</span><button id="aboutClose" class="ghost small">×</button></div>
+      <div class="modal-body">
+        <p class="tag-muted"><b>Fast Enough to Make Wi-Fi Blush… Because Your Files Deserve a First-Class Trip.</b> 📶😳🛫📂</p>
+        <p>Created by <b>Aparup Biswas</b> ❤️</p>
+        <p class="muted small">Version: <span id="ver"></span></p>
+      </div>
+      <div class="modal-foot"><button id="okAbout" class="primary">OK</button></div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/script.js"></script>
 </body>
 </html>
