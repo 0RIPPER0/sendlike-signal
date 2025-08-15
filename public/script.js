@@ -365,24 +365,57 @@ async function sendFilesTo(targetId, files) {
       chunkBytes: cBytes
     });
 
+    // --- Progress UI ---
+    const progressElem = document.createElement('div');
+    progressElem.className = 'progressItem';
+    progressElem.innerHTML = `
+      <div><strong>${file.name}</strong> <span class="percent">0%</span> (<span class="speed">0 MB/s</span>)</div>
+      <div class="barWrap"><div class="bar"></div></div>
+    `;
+    document.body.appendChild(progressElem); // You can append to a nicer container if you want
+    const bar = progressElem.querySelector('.bar');
+    const percentSpan = progressElem.querySelector('.percent');
+    const speedSpan = progressElem.querySelector('.speed');
+
     let offset = 0;
     let seq = 0;
+    let lastTime = Date.now();
+    let bytesThisSecond = 0;
 
     while (offset < file.size) {
       const end = Math.min(offset + cBytes, file.size);
-
-      // Read chunk as ArrayBuffer
       const chunk = await file.slice(offset, end).arrayBuffer();
 
-      // Send chunk & wait a small delay to avoid flooding
       socket.emit('fileChunk', { targetId, fileId, seq, chunk });
-      await new Promise(r => setTimeout(r, MODE_LOCAL ? 2 : 0)); // small throttle for local
 
       offset = end;
       seq++;
+      bytesThisSecond += chunk.byteLength;
+
+      // --- Update progress ---
+      const percent = ((offset / file.size) * 100).toFixed(1);
+      bar.style.width = `${percent}%`;
+      percentSpan.textContent = `${percent}%`;
+
+      // Speed calc every second
+      const now = Date.now();
+      if (now - lastTime >= 1000) {
+        const speedMBs = (bytesThisSecond / (1024 * 1024)).toFixed(2);
+        speedSpan.textContent = `${speedMBs} MB/s`;
+        bytesThisSecond = 0;
+        lastTime = now;
+      }
+
+      // Small delay to prevent overload
+      await new Promise(r => setTimeout(r, MODE_LOCAL ? 2 : 0));
     }
 
     socket.emit('fileComplete', { targetId, fileId });
+
+    // Finalize
+    bar.style.width = '100%';
+    percentSpan.textContent = '100%';
+    speedSpan.textContent = 'Done';
   }
 }
 
