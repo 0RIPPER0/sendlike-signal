@@ -1,6 +1,8 @@
-// ======================================
-//  IMPORTS & INITIAL SETUP
-// ======================================
+// ================================
+//  SENDLIKE — SERVER
+//  Express + Socket.IO
+// ================================
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -10,131 +12,157 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-// ======================================
+// ================================
 //  STATIC FILES
-// ======================================
-// Serve all static assets from 'public' folder
-app.use(express.static(path.join(__dirname, "public")));
+// ================================
+app.use(express.static(path.join(__dirname, ".")));
 
-// Serve index.html on root
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
+// ================================
+//  IN-MEMORY GROUP STORE
+// ================================
+const JOIN_CUTOFF_MS = 10 * 60 * 1000; // 10 min join window
+const groups = Object.create(null);     // { [code]: { hostId, createdAt, openShare, members:[] } }
 
-// ======================================
-//  GROUP MANAGEMENT
-// ======================================
-let groups = {}; // Stores active groups
-
-// Generate a random 6-digit group code
-function generateCode() {
+function genCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// Disband a group and notify members
+// Funny name pool (server-side)
+const ADJ = ["Swift","Happy","Brave","Cosmic","Fuzzy","Mighty","Quiet","Zippy","Bubbly","Chill"];
+const NOUN = ["Panda","Falcon","Otter","Phoenix","Badger","Koala","Eagle","Tiger","Llama","Whale"];
+function funnyName() {
+  return `${ADJ[Math.floor(Math.random()*ADJ.length)]} ${NOUN[Math.floor(Math.random()*NOUN.length)]}`;
+}
+
+// ================================
+//  HELPERS
+// ================================
 function disbandGroup(code, reason = "Group closed") {
-  const group = groups[code];
-  if (!group) return;
-
+  const g = groups[code];
+  if (!g) return;
   io.to(code).emit("groupDisbanded", reason);
-  clearTimeout(group.timer);
   delete groups[code];
-
-  console.log(`❌ Group ${code} disbanded: ${reason}`);
 }
 
-// Start join window timer for the group
-function startGroupTimer(code) {
-  const group = groups[code];
-  if (!group) return;
-
-  clearTimeout(group.timer);
-  if (group.ttlMs > 0) {
-    group.timer = setTimeout(() => {
-      disbandGroup(code, "Join time over");
-    }, group.ttlMs);
-  }
-}
-
-// ======================================
-//  SOCKET.IO EVENTS
-// ======================================
+// ================================
+//  SOCKET.IO
+// ================================
 io.on("connection", (socket) => {
-  console.log(`🔌 New connection: ${socket.id}`);
 
-  // ---- CREATE GROUP ----
-  socket.on("createGroup", ({ name, ttlMinutes = 10 }, callback) => {
-    const code = generateCode();
-    const ttlMs = ttlMinutes * 60 * 1000;
+  // ================================
+  //  CREATE GROUP
+  // ================================
+  socket.on("createGroup", ({ name }, cb = () => {}) => {
+    try {
+      const code = genCode();
+      const personName = (name || "").trim() || funnyName();
+      const createdAt = Date.now();
 
-    groups[code] = {
+      groups[code] = {
+        hostId: socket.id,
+        createdAt,
+        openShare: false,
+        members: [{ id: socket.id, name: personName }],
+      };
+
+      socket.join(code);
+
+      cb({
+        ok: true,
+        code,
       hostId: socket.id,
-      createdAt: Date.now(),
-      ttlMs,
-      members: [{ id: socket.id, name }],
-      timer: null,
-    };
+        openShare: false,
+        joinClosesAt: createdAt + JOIN_CUTOFF_MS,
+      });
 
-    socket.join(code);
-    startGroupTimer(code);
-
-    callback({ code, hostId: socket.id });
-    io.to(code).emit("updateMembers", groups[code].members);
-
-    console.log(`📌 Group created: ${code} by ${name}`);
+      io.to(code).emit("updateMembers", groups[code].members);
+    } catch (err) {
+      cb({ ok: false, error: "Failed to create group" });
+    }
   });
 
-  // ---- JOIN GROUP ----
-  socket.on("joinGroup", ({ name, code }, callback) => {
-    const group = groups[code];
-    if (!group) return callback({ error: "Group not found" });
+  // ================================
+  //  JOIN GROUP
+  // ================================
+  socket.on("joinGroup", ({ name, code }, cb = () => {}) => {
+    try {
+      const g = groups[code];
+      if (!g) return cb({ ok: false, error: "Group not found" });
 
-    group.members.push({ id: socket.id, name });
-    socket.join(code);
-
-    io.to(code).emit("updateMembers", group.members);
-    callback({ ok: true, hostId: group.hostId });
-
-    console.log(`👤 ${name} joined group ${code}`);
-  });
-
-  // ---- CHAT ----
-  socket.on("chat", ({ room, name, text }) => {
-    io.to(room).emit("chat", { name, text });
-  });
-
-  // ---- DISBAND GROUP (HOST ONLY) ----
-  socket.on("disbandGroup", (code) => {
-    const group = groups[code];
-    if (!group || group.hostId !== socket.id) return;
-    disbandGroup(code, "Host disbanded");
-  });
-
-  // ---- DISCONNECT ----
-  socket.on("disconnect", () => {
-    Object.keys(groups).forEach((code) => {
-      const group = groups[code];
-      if (!group) return;
-
-      const memberIndex = group.members.findIndex((m) => m.id === socket.id);
-      if (memberIndex !== -1) {
-        const wasHost = group.hostId === socket.id;
-        group.members.splice(memberIndex, 1);
-
-        if (wasHost) {
-          disbandGroup(code, "Host left");
-        } else {
-          io.to(code).emit("updateMembers", group.members);
-        }
+      const now = Date.now();
+      if (now > g.createdAt + JOIN_CUTOFF_MS) {
+        return cb({ ok: false, error: "Join window closed (10 min limit)" });
       }
-    });
+
+      const personName = (name || "").trim() || funnyName();
+      g.members.push({ id: socket.id, name: personName });
+
+      socket.join(code);
+      io.to(code).emit("updateMembers", g.members);
+
+      cb({
+        ok: true,
+        hostId: g.hostId,
+        openShare: g.openShare,
+        joinClosesAt: g.createdAt + JOIN_CUTOFF_MS,
+      });
+    } catch (err) {
+      cb({ ok: false, error: "Failed to join group" });
+    }
+  });
+
+  // ================================
+  //  DISBAND GROUP (HOST ONLY)
+// ================================
+  socket.on("disbandGroup", ({ code }) => {
+    const g = groups[code];
+    if (!g) return;
+    if (g.hostId !== socket.id) return;
+    disbandGroup(code, "Host disbanded the group");
+  });
+
+  // ================================
+  //  OPENSHARE TOGGLE (HOST ONLY)
+  // ================================
+  socket.on("toggleOpenShare", ({ code, value }) => {
+    const g = groups[code];
+    if (!g) return;
+    if (g.hostId !== socket.id) return;
+    g.openShare = !!value;
+    io.to(code).emit("openShare", g.openShare);
+  });
+
+  // ================================
+  //  GROUP CHAT RELAY
+  // ================================
+  socket.on("chat", ({ room, name, text }) => {
+    if (!room || !text) return;
+    io.to(room).emit("chat", { id: socket.id, name: name || "Anonymous", text, ts: Date.now() });
+  });
+
+  // ================================
+  //  DISCONNECT CLEANUP
+  // ================================
+  socket.on("disconnect", () => {
+    for (const code of Object.keys(groups)) {
+      const g = groups[code];
+      if (!g) continue;
+
+      const idx = g.members.findIndex(m => m.id === socket.id);
+      if (idx !== -1) {
+        const wasHost = g.hostId === socket.id;
+        g.members.splice(idx, 1);
+        if (wasHost) disbandGroup(code, "Host left");
+        else io.to(code).emit("updateMembers", g.members);
+      }
+    }
   });
 });
 
-// ======================================
+// ================================
 //  START SERVER
-// ======================================
+// ================================
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+  console.log(`[SendLike] http://localhost:${PORT}`);
 });
