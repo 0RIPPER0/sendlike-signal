@@ -10,7 +10,15 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "..", "public")));
+
+// Serve static files from /public
+const publicPath = path.join(__dirname, "public");
+app.use(express.static(publicPath));
+
+// Serve index.html for root route
+app.get("/", (req, res) => {
+  res.sendFile(path.join(publicPath, "index.html"));
+});
 
 let groups = {};        // code -> { hostId, createdAt, ttlMs, members:[{id,name}], timer }
 let localPeers = new Map(); // socketId -> { name }
