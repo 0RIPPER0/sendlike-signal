@@ -9,7 +9,39 @@ window.addEventListener('beforeinstallprompt', (e) => {
   const btn = document.getElementById('installBtn'); btn.classList.remove('hidden');
   btn.onclick = async () => { btn.classList.add('hidden'); deferredPrompt.prompt(); deferredPrompt = null; };
 });
+// Landing fade-out + plane loop
+window.addEventListener('load', () => {
+  const plane = document.querySelector('.plane');
+  const contrail = document.querySelector('.contrail');
 
+  let flightCount = 0;
+  const maxFlights = 2; // Number of times the plane flies before fading out
+
+  function flyPlane() {
+    plane.style.animation = 'planeCurve 1.5s ease-in forwards';
+    contrail.style.animation = 'contrailFade 1.5s ease-in forwards';
+
+    setTimeout(() => {
+      plane.style.animation = 'none';
+      contrail.style.animation = 'none';
+      flightCount++;
+
+      if (flightCount < maxFlights) {
+        setTimeout(flyPlane, 500);
+      } else {
+        setTimeout(() => {
+          document.getElementById('landing').style.opacity = '0';
+          setTimeout(() => {
+            document.getElementById('landing').style.display = 'none';
+            document.querySelector('.container').style.display = 'grid';
+          }, 1000);
+        }, 500);
+      }
+    }, 1500);
+  }
+
+  flyPlane();
+});
 // About modal
 const aboutBtn = document.getElementById('aboutBtn');
 const aboutModal = document.getElementById('aboutModal');
