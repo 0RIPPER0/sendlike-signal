@@ -2,182 +2,82 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SendLike — P2P Fast Share</title>
-  <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#7c3aed">
-  <link rel="stylesheet" href="/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SendLike</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
-<body class="violet">
-  <div class="bg-anim"></div>
+<body>
+  <div class="container">
+    
+    <!-- Header -->
+    <header>
+      <h1>
+        <img src="icon.png" alt="SendLike Logo">
+        SendLike
+      </h1>
+      <button onclick="showAbout()">About</button>
+    </header>
 
-  <header class="hero container">
-    <div class="brand">
-      <div class="logo">🚀</div>
-      <div class="title">SendLike</div>
-    </div>
-    <div class="actions-header">
-      <button id="installBtn" class="ghost small hidden">Install App</button>
-      <button id="aboutBtn" class="ghost small">About</button>
-    </div>
-  </header>
-
-  <section class="landing container">
-    <h1 class="tagline" id="tagline"></h1>
-    <p class="sub">Send files face-to-face or across the world. No cloud storage. Just fast, direct, private.</p>
-
-    <div class="cards">
-      <div class="card glass"><div class="em">🌐</div><h3>Online Mode</h3><p>Create a 6-digit code. Friends join. Send to one or everyone.</p></div>
-      <div class="card glass"><div class="em">📡</div><h3>Local Mode</h3><p>Same Wi-Fi? Devices discover each other automatically — no codes.</p></div>
-      <div class="card glass"><div class="em">⏱️</div><h3>Session Timer</h3><p>5, 10, 15 minutes, or Unlimited. Auto-close when time’s up.</p></div>
-    </div>
-
-    <div class="actions">
-      <button id="startApp" class="primary big">Start Now</button>
-      <button id="howWorks" class="ghost big">How Local Mode Works</button>
-    </div>
-
-    <footer class="footer muted small">© 2025 <b>Aparup Biswas</b> — with a little help from ChatGPT</footer>
-  </section>
-
-  <section class="how container hidden" id="howSection">
-    <h2>How Local Mode Works</h2>
-    <ol>
-      <li>Connect devices to the same Wi-Fi.</li>
-      <li>Open SendLike on both devices and toggle <b>Local Mode</b>.</li>
-      <li>Devices appear with cute names + IDs (e.g., “Golden Mango <b>(A3F2C1)</b>”).</li>
-      <li>Tap a device to connect, then drop a file to send.</li>
-    </ol>
-    <p class="muted small">Tip: If devices don’t see each other, ensure Wi-Fi doesn’t block device-to-device (AP isolation).</p>
-  </section>
-
-  <main class="app container hidden" id="app">
-    <div class="modebar glass">
-      <div class="switcher">
-        <span id="modeLabel">🌐 Online Mode</span>
-        <label class="switch"><input type="checkbox" id="modeSwitch"><span class="slider"></span></label>
-        <span>📡 Local Mode</span>
+    <!-- Mode Toggle -->
+    <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <label>
+          <span>🌐 Online Mode</span>
+          <input type="checkbox" id="modeToggle" style="margin: 0 10px;">
+          <span>📡 Local Mode</span>
+        </label>
       </div>
-      <div class="timerSelect">
-        <label>Session limit:</label>
-        <select id="ttlSelect">
-          <option value="5">5 min</option>
-          <option value="10" selected>10 min</option>
-          <option value="15">15 min</option>
-          <option value="0">Unlimited</option>
+      <div>
+        Session limit:
+        <select id="sessionLimit">
+          <option value="10">10 min</option>
+          <option value="30">30 min</option>
+          <option value="60">1 hour</option>
+          <option value="0">No limit</option>
         </select>
       </div>
     </div>
 
-    <!-- ONLINE -->
-    <section id="onlinePanel" class="panel card glass">
+    <!-- Join Group Section -->
+    <div class="card">
       <h2>Online (with Code)</h2>
-
-      <div class="row">
-        <input id="nameOnline" placeholder="Your name" autocomplete="name" />
-        <button id="createBtn" class="primary">Create Group</button>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; align-items: center;">
+        <input id="nameInput" type="text" placeholder="Your name">
+        <input id="codeInput" type="text" placeholder="6-digit code" maxlength="6">
+        <button onclick="joinGroup()">Join Group</button>
       </div>
-
-      <div class="row input-fix">
-        <input id="joinCode" placeholder="6-digit code" inputmode="numeric" maxlength="6" />
-        <button id="joinBtn">Join Group</button>
-      </div>
-
-      <div id="onlineInfo" class="muted"></div>
-
-      <div id="groupArea" class="hidden">
-        <div class="grid">
-          <div class="code-card card soft glass">
-            <div class="label">Group Code</div>
-            <div id="groupCode" class="code"></div>
-            <div id="expires" class="muted small"></div>
-          </div>
-
-          <div class="send-card card soft glass">
-            <label class="file"><input type="file" id="fileOnline" /><span>Choose File</span></label>
-            <button id="sendAll" class="primary">Send to All</button>
-            <button id="disband" class="danger hidden">Disband</button>
-          </div>
-        </div>
-
-        <h3>People</h3>
-        <div id="peersOnline" class="peers"></div>
-        <p class="muted small">Drag a file onto a person to send only to them.</p>
-
-        <div id="progressWrap" class="hidden">
-          <div id="runway"><div id="jet">🛫</div></div>
-          <div id="progressTitle"></div>
-          <div class="progress"><div id="progressBar" class="progress-bar"></div></div>
-          <div id="speedLine" class="muted small"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- LOCAL -->
-    <section id="localPanel" class="panel card glass hidden">
-      <h2>Local (same Wi-Fi, no codes)</h2>
-
-      <div class="row">
-        <input id="nameLocal" placeholder="Your device name (e.g., Golden Mango)" />
-        <button id="enterLocal" class="primary">Discover Devices</button>
-        <button id="leaveLocal" class="ghost hidden">Leave</button>
-      </div>
-
-      <div id="localInfo" class="muted">Devices on this Wi-Fi will appear below.</div>
-
-      <div id="localArea" class="hidden">
-        <div class="send-card card soft glass">
-          <label class="file"><input type="file" id="fileLocal" /><span>Choose File</span></label>
-          <button id="sendAllLocal" class="primary">Send to All</button>
-        </div>
-
-        <h3>Devices</h3>
-        <div id="peersLocal" class="peers"></div>
-        <p class="muted small">Drag a file onto a device bubble to target only that device.</p>
-
-        <div id="progressWrapLocal" class="hidden">
-          <div id="runwayLocal"><div id="jetLocal">🛫</div></div>
-          <div id="progressTitleLocal"></div>
-          <div class="progress"><div id="progressBarLocal" class="progress-bar"></div></div>
-          <div id="speedLineLocal" class="muted small"></div>
-        </div>
-      </div>
-    </section>
-
-    <section id="disbanded" class="hidden center">
-      <h2>Group closed</h2>
-      <p id="disbandReason" class="muted">The host ended the session.</p>
-      <button onclick="location.reload()">Create/Join new group</button>
-    </section>
-
-    <footer class="footer muted small">© 2025 <b>Aparup Biswas</b></footer>
-  </main>
-
-  <!-- Floating Chat -->
-  <button class="fab chat hidden" id="chatBtn" title="Group Chat">💬</button>
-  <div class="chat-panel hidden" id="chatPanel">
-    <div class="chat-head">Group Chat <button id="closeChat" class="ghost small">×</button></div>
-    <div class="chat-body" id="chatBody"></div>
-    <div class="chat-foot">
-      <input id="chatInput" placeholder="Type a message…" />
-      <button id="chatSend" class="primary">Send</button>
     </div>
-  </div>
 
-  <!-- About Modal -->
-  <div class="modal hidden" id="aboutModal">
-    <div class="modal-card glass">
-      <div class="modal-head"><span>🚀 SendLike</span><button id="aboutClose" class="ghost small">×</button></div>
-      <div class="modal-body">
-        <p class="tag-muted"><b>Fast Enough to Make Wi-Fi Blush… Because Your Files Deserve a First-Class Trip.</b> 📶😳🛫📂</p>
-        <p>Created by <b>Aparup Biswas</b></p>
-        <p class="muted small">Version: <span id="ver"></span></p>
+    <!-- Create Group Section -->
+    <div class="card">
+      <h2>Create a New Group</h2>
+      <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center;">
+        <input id="hostName" type="text" placeholder="Your name">
+        <button onclick="createGroup()">Create Group</button>
       </div>
-      <div class="modal-foot"><button id="okAbout" class="primary">OK</button></div>
     </div>
+
+    <!-- Chat Section -->
+    <div id="chatSection" class="card" style="display:none;">
+      <h2>Group Chat</h2>
+      <div id="chatMessages" style="height:200px; overflow-y:auto; background:rgba(255,255,255,0.3); border-radius:10px; padding:1rem; margin-bottom:1rem;"></div>
+      <div style="display:grid; grid-template-columns: 1fr auto; gap:1rem;">
+        <input id="chatInput" type="text" placeholder="Type a message...">
+        <button onclick="sendChat()">Send</button>
+      </div>
+    </div>
+
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/script.js"></script>
+  <script src="client.js"></script>
+  <script>
+    function showAbout() {
+      alert("SendLike - Simple P2P sharing via code or local network.");
+    }
+  </script>
 </body>
 </html>
