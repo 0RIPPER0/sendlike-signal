@@ -1,11 +1,16 @@
 {
-  "name": "sendlike-app",
+  "name": "sendlike-signal",
   "version": "1.0.0",
+  "description": "SendLike — group sharing & chat with local and online modes",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "socket.io": "^4.7.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
