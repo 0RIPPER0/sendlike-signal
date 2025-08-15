@@ -262,24 +262,27 @@ function currentRoom(){ return (!localPanel.classList.contains("hidden") ? "loca
 function joinChatRoom(room, name){ socket.emit("chat", { room, name, text: `${name} joined` }); chatBtn.classList.remove("hidden"); chatPanel.classList.remove("hidden"); setTimeout(()=>chatPanel.classList.add("hidden"), 1200); }
 
 /* ================================
-   PATCH: Fix join code click/focus
+   PATCH: Make all key inputs fully clickable
    ================================ */
 document.addEventListener("DOMContentLoaded", function () {
-  const joinCodeInput = document.getElementById("joinCode");
-  if (joinCodeInput) {
-    // Find the nearest clickable container
-    const clickableArea = joinCodeInput.closest(".row") || joinCodeInput.parentElement;
+  const clickableInputs = ["yourName", "localCode", "joinCode"];
 
-    if (clickableArea) {
-      clickableArea.style.cursor = "text";
-      clickableArea.addEventListener("click", () => {
-        joinCodeInput.focus();
+  clickableInputs.forEach(id => {
+    const inputEl = document.getElementById(id);
+    if (inputEl) {
+      const clickableArea = inputEl.closest(".row") || inputEl.parentElement;
+
+      if (clickableArea) {
+        clickableArea.style.cursor = "text";
+        clickableArea.addEventListener("click", () => {
+          inputEl.focus();
+        });
+      }
+
+      // Auto-select content on focus
+      inputEl.addEventListener("focus", function () {
+        this.select();
       });
     }
-
-    // Optional: auto-select text when focusing
-    joinCodeInput.addEventListener("focus", function () {
-      this.select();
-    });
-  }
+  });
 });
