@@ -9,7 +9,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
   <style>
-    /* Reset & Base */
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Inter', sans-serif;
@@ -23,7 +22,7 @@
       overflow-x: hidden;
     }
 
-    /* Layered Background Animation */
+    /* Background Animation */
     body::before,
     body::after {
       content: "";
@@ -51,7 +50,6 @@
       100% { background-position: 50px 50px, 50px 50px; }
     }
 
-    /* Layout Container */
     .container {
       display: grid;
       gap: 1.5rem;
@@ -59,7 +57,6 @@
       width: 100%;
     }
 
-    /* Header */
     header {
       display: flex;
       justify-content: space-between;
@@ -76,7 +73,6 @@
       height: 40px;
     }
 
-    /* Glass Cards */
     .card {
       background: rgba(255, 255, 255, 0.25);
       backdrop-filter: blur(14px);
@@ -86,7 +82,6 @@
       box-shadow: 0 4px 30px rgba(0,0,0,0.1);
     }
 
-    /* Inputs */
     input, select {
       padding: 0.7rem;
       border-radius: 10px;
@@ -96,13 +91,12 @@
       font-size: 1rem;
     }
 
-    /* Buttons - Glass Gradient Hover & Ripple */
     button {
       position: relative;
       padding: 0.7rem 1.5rem;
       border: none;
       border-radius: 12px;
-      background: linear-gradient(135deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1));
+      background: linear-gradient(135deg, rgba(138,43,226,0.4), rgba(75,0,130,0.3));
       color: #222;
       font-weight: 600;
       cursor: pointer;
@@ -110,27 +104,11 @@
       transition: all 0.3s ease;
     }
     button:hover {
-      background: linear-gradient(135deg, rgba(255,255,255,0.6), rgba(255,255,255,0.3));
+      background: linear-gradient(135deg, rgba(138,43,226,0.6), rgba(75,0,130,0.5));
       transform: translateY(-1px);
     }
     button:active {
       transform: scale(0.98);
-    }
-    button::after {
-      content: "";
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 0;
-      height: 0;
-      background: rgba(255,255,255,0.4);
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-      transition: width 0.4s ease, height 0.4s ease;
-    }
-    button:active::after {
-      width: 200%;
-      height: 200%;
     }
 
     /* Landing Page */
@@ -144,24 +122,24 @@
       align-items: center;
       z-index: 1000;
       transition: opacity 1s ease;
-      overflow: hidden;
+      padding: 2rem;
+      text-align: center;
     }
     #landing h1 {
-      font-size: 1.8rem;
-      max-width: 90%;
-      text-align: center;
+      font-size: 1.4rem;
+      line-height: 1.6;
       color: white;
+      max-width: 90%;
       margin-bottom: 1rem;
-      position: relative;
     }
 
+    /* Plane Animation */
     .plane {
       font-size: 2rem;
       display: inline-block;
-      animation: planeCurve 1.5s ease-in forwards;
+      animation: planeLoop 2.5s ease-in-out forwards;
+      position: relative;
     }
-
-    /* Contrail */
     .contrail {
       position: absolute;
       width: 320px;
@@ -170,45 +148,40 @@
       border-top: 3px solid rgba(255,255,255,0.7);
       border-radius: 50% 50% 0 0;
       top: 50%;
-      left: calc(50% - 160px);
+      left: -150px;
       transform-origin: left center;
-      animation: contrailFade 1.5s ease-in forwards;
+      animation: contrailFollow 2.5s ease-in-out forwards;
     }
 
-    @keyframes planeCurve {
+    @keyframes planeLoop {
       0% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
-      40% { transform: translate(120px, -20px) rotate(10deg) scale(1); opacity: 1; }
-      80% { transform: translate(240px, -60px) rotate(18deg) scale(0.9); opacity: 0.9; }
+      20% { transform: translate(50px, -30px) rotate(-15deg) scale(1.05); }
+      40% { transform: translate(100px, 10px) rotate(25deg) scale(1); }
+      60% { transform: translate(150px, -50px) rotate(-10deg) scale(0.95); }
+      80% { transform: translate(250px, -80px) rotate(15deg) scale(0.9); }
       100% { transform: translate(320px, -120px) rotate(25deg) scale(0.8); opacity: 0; }
     }
-
-    @keyframes contrailFade {
-      0% { opacity: 0.7; transform: scaleX(0); }
-      30% { transform: scaleX(1); opacity: 0.6; }
-      80% { opacity: 0.3; }
+    @keyframes contrailFollow {
+      0% { opacity: 0; transform: scaleX(0); }
+      10% { opacity: 0.7; transform: scaleX(0.3); }
+      50% { opacity: 0.5; transform: scaleX(0.8); }
       100% { opacity: 0; transform: scaleX(1.2); }
-    }
-
-    @media (max-width: 500px) {
-      .container { padding: 1rem; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Landing Page -->
+  <!-- Landing -->
   <div id="landing">
     <h1>
       Fast enough to make your WIFI blush...<br>
-      Because your file deserve a First Class 
-      <span class="plane">✈️</span>
-      <span class="contrail"></span>
+      Because your file deserve a First Class ✈️
+      <span class="plane">✈️<span class="contrail"></span></span>
     </h1>
   </div>
 
   <!-- Main Container -->
   <div class="container" style="display:none;">
-    <!-- Header -->
     <header>
       <h1>
         <img src="icon.png" alt="SendLike Logo">
@@ -217,7 +190,6 @@
       <button onclick="showAbout()">About</button>
     </header>
 
-    <!-- Mode Toggle -->
     <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
       <div>
         <label>
@@ -237,7 +209,6 @@
       </div>
     </div>
 
-    <!-- Join Group -->
     <div class="card">
       <h2>Online (with Code)</h2>
       <div style="display: grid; gap: 1rem;">
@@ -247,7 +218,6 @@
       </div>
     </div>
 
-    <!-- Create Group -->
     <div class="card">
       <h2>Create a New Group</h2>
       <div style="display: grid; gap: 1rem;">
@@ -256,7 +226,6 @@
       </div>
     </div>
 
-    <!-- Chat Section -->
     <div id="chatSection" class="card" style="display:none;">
       <h2>Group Chat</h2>
       <div id="chatMessages" style="height:200px; overflow-y:auto; background:rgba(255,255,255,0.3); border-radius:10px; padding:1rem; margin-bottom:1rem;"></div>
@@ -270,7 +239,6 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
   <script>
-    // Landing fade-out
     window.addEventListener('load', () => {
       setTimeout(() => {
         document.getElementById('landing').style.opacity = '0';
@@ -278,14 +246,13 @@
           document.getElementById('landing').style.display = 'none';
           document.querySelector('.container').style.display = 'grid';
         }, 1000);
-      }, 2500);
+      }, 3000);
     });
 
     function showAbout() {
       alert("SendLike - Simple P2P sharing via code or local network.");
     }
 
-    // Mode toggle
     document.getElementById('modeToggle').addEventListener('change', function () {
       console.log(this.checked ? 'Local Mode' : 'Online Mode');
     });
