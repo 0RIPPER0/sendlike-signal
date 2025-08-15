@@ -30,7 +30,7 @@
     <!-- Header -->
     <header>
       <h1>
-        <img src="icon.png" alt="SendLike Logo">
+        <img src="icon.png" alt="SendLike Logo" style="height:30px;vertical-align:middle;">
         SendLike
       </h1>
       <button onclick="showAbout()">About</button>
@@ -38,7 +38,7 @@
 
     <!-- Mode Toggle -->
     <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
-      <div id="modeLabel">ᯤ Online Mode</div>
+      <div id="modeLabel">🌐 Online Mode</div>
       <label class="switch">
         <input type="checkbox" id="modeSwitch">
         <span class="slider"></span>
@@ -87,5 +87,10 @@
   <!-- Scripts -->
   <script src="/socket.io/socket.io.js"></script>
   <script src="script.js"></script>
+  <script>
+    function showAbout() {
+      alert("SendLike - Simple P2P sharing via code or local network.");
+    }
+  </script>
 </body>
 </html>
