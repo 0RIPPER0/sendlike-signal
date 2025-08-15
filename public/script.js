@@ -1,404 +1,325 @@
-/* =========================================================
-=  SendLike — Client (Landing + Mode + Join/Create + People +
-=                   Chat + Drag/Drop + File Transfer)
-=  Uses Socket.IO relay. Local mode: 4MB chunks. Online: 64KB.
-========================================================= */
-
-/* ------------------------------
-   Socket & Elements
------------------------------- */
+// SendLike — PWA UI + Local/Online + WebRTC DC + Host controls + Chat bubble + Sounds
+const VERSION = "1.0.0";
 const socket = io();
 
-const app            = document.getElementById('app');
-const landing        = document.getElementById('landing');
-const aboutBtn       = document.getElementById('aboutBtn');
-
-const modeSwitch     = document.getElementById('modeSwitch');
-const modeLabel      = document.getElementById('modeLabel');
-
-const openShareWrap  = document.getElementById('openShareWrap');
-const openShareLabel = document.getElementById('openShareLabel');
-const openShareSwitch= document.getElementById('openShareSwitch');
-
-const cardOnlineJoin = document.getElementById('cardOnlineJoin');
-const cardOnlineCreate = document.getElementById('cardOnlineCreate');
-
-const nameOnline     = document.getElementById('nameOnline');
-const joinCodeInput  = document.getElementById('joinCode');
-const joinBtn        = document.getElementById('joinBtn');
-
-const nameHost       = document.getElementById('nameHost');
-const createBtn      = document.getElementById('createBtn');
-
-const sessionInfo    = document.getElementById('sessionInfo');
-const sessionStatus  = document.getElementById('sessionStatus');
-const sessionCode    = document.getElementById('sessionCode');
-const sessionRole    = document.getElementById('sessionRole');
-const disbandBtn     = document.getElementById('disbandBtn');
-
-const peopleTitle    = document.getElementById('peopleTitle');
-const peopleList     = document.getElementById('peopleList');
-
-const chatFab        = document.getElementById('chatToggleBtn');
-const chatDot        = document.getElementById('chatNotifDot');
-const chatBox        = document.getElementById('chatBox');
-const chatClose      = document.getElementById('chatCloseBtn');
-const chatMessages   = document.getElementById('chatMessages');
-const chatInput      = document.getElementById('chatInput');
-const sendChatBtn    = document.getElementById('sendChatBtn');
-
-const filePicker     = document.getElementById('fileInput');
-
-/* Drag overlay */
-let dropOverlay = document.getElementById('dropOverlay');
-if (!dropOverlay) {
-  dropOverlay = document.createElement('div');
-  dropOverlay.id = 'dropOverlay';
-  dropOverlay.innerHTML = '<div>Drop files to send</div>';
-  document.body.appendChild(dropOverlay);
-}
-
-/* ------------------------------
-   State
------------------------------- */
-let MODE_LOCAL = false;
-let currentRoom = null;
-let hostId = null;
-let isHost = false;
-let myName = '';
-let openShare = false;
-
-let people = []; // online: group members; local: local roster
-let mySocketId = null;
-socket.on('connect', () => { mySocketId = socket.id; });
-
-/* For transfers */
-const rndName = () => {
-  const adj = ["Spicy","Sleepy","Bouncy","Shiny","Sneaky","Brave","Chill","Zippy","Fuzzy","Witty","Cosmic","Turbo","Sassy","Pixel","Mellow"];
-  const ani = ["Panda","Otter","Falcon","Koala","Lemur","Tiger","Sloth","Fox","Yak","Marmot","Narwhal","Dolphin","Eagle","Moose","Gecko"];
-  return `${adj[Math.floor(Math.random()*adj.length)]}${ani[Math.floor(Math.random()*ani.length)]}`;
-};
-let localName = rndName();
-
-const KB = 1024, MB = KB * KB;
-
-/* ========================================================
-=  Landing (fade + plane loop)
-======================================================== */
-function loopPlane() {
-  const plane = landing.querySelector('.plane');
-  const trail = landing.querySelector('.contrail');
-  if (!plane || !trail) return;
-  plane.style.animation = 'none';
-  trail.style.animation = 'none';
-  // reflow
-  void plane.offsetWidth; void trail.offsetWidth;
-  plane.style.animation = 'planeCurve 1.5s ease-in forwards';
-  trail.style.animation = 'contrailFade 1.5s ease-in forwards';
-  setTimeout(loopPlane, 3800);
-}
-function startLanding() {
-  loopPlane();
-  setTimeout(() => landing.classList.add('hidden'), 2500);
-  landing.addEventListener('transitionend', () => {
-    landing.style.display = 'none';
-    app.hidden = false;
-  }, { once: true });
-}
-window.addEventListener('load', startLanding);
-
-/* ========================================================
-=  Helpers
-======================================================== */
-function safeName(raw) {
-  const s = (raw || '').trim();
-  return s || 'Guest';
-}
-function setSessionUI({ code, roleText, statusText }) {
-  sessionCode.textContent = code || '———';
-  sessionRole.textContent = roleText || '—';
-  sessionStatus.textContent = statusText || 'Active';
-  sessionInfo.hidden = false;
-  disbandBtn.hidden = !isHost;
-  // show OpenShare toggle only if host + online mode
-  openShareWrap.hidden = !(isHost && !MODE_LOCAL && currentRoom);
-  openShareLabel.textContent = openShare ? '🟢 Open Share' : '🔒 Host-only sending';
-  openShareSwitch.checked = !!openShare;
-}
-function avatarColor(seed) {
-  // simple deterministic pastel
-  let h = 0; for (let i=0;i<seed.length;i++) h = (h*31 + seed.charCodeAt(i)) % 360;
-  return `hsl(${h}deg 70% 55%)`;
-}
-function renderPeople(list) {
-  peopleList.innerHTML = '';
-  list.forEach(p => {
-    if (MODE_LOCAL && p.id === mySocketId) return; // don't show self in local roster
-    const card = document.createElement('div');
-    card.className = 'person';
-    card.dataset.id = p.id;
-    const av = document.createElement('div');
-    av.className = 'avatar';
-    av.textContent = (p.name||'?').slice(0,1).toUpperCase();
-    av.style.background = avatarColor(p.name || p.id);
-    const nm = document.createElement('div');
-    nm.textContent = p.name || '—';
-    card.appendChild(av); card.appendChild(nm);
-    card.addEventListener('click', () => chooseTargetAndPickFiles(p.id, p.name));
-    peopleList.appendChild(card);
-  });
-}
-
-/* ========================================================
-=  About + Mode Toggle
-======================================================== */
-aboutBtn.addEventListener('click', () => {
-  alert('SendLike — Simple group sharing via code or local network.');
+// PWA install
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault(); deferredPrompt = e;
+  const btn = document.getElementById('installBtn'); btn.classList.remove('hidden');
+  btn.onclick = async () => { btn.classList.add('hidden'); deferredPrompt.prompt(); deferredPrompt = null; };
 });
+// Landing fade-out + plane loop
+window.addEventListener('load', () => {
+  const plane = document.querySelector('.plane');
+  const contrail = document.querySelector('.contrail');
 
-modeSwitch.addEventListener('change', () => {
-  MODE_LOCAL = modeSwitch.checked;
-  modeLabel.textContent = MODE_LOCAL ? '📡 Local Mode' : '🌐 Online Mode';
+  let flightCount = 0;
+  const maxFlights = 2; // Number of times the plane flies before fading out
 
-  // UI show/hide
-  cardOnlineJoin.hidden = MODE_LOCAL;
-  cardOnlineCreate.hidden = MODE_LOCAL;
-  sessionInfo.hidden = MODE_LOCAL; // no group session UI for local
-  disbandBtn.hidden = true;
-  openShareWrap.hidden = true;
-  currentRoom = null; hostId = null; isHost = false; openShare = false;
+  function flyPlane() {
+    plane.style.animation = 'planeCurve 1.5s ease-in forwards';
+    contrail.style.animation = 'contrailFade 1.5s ease-in forwards';
 
-  // People title
-  peopleTitle.textContent = MODE_LOCAL ? 'Nearby Devices' : 'Members';
-  peopleList.innerHTML = '';
+    setTimeout(() => {
+      plane.style.animation = 'none';
+      contrail.style.animation = 'none';
+      flightCount++;
 
-  if (MODE_LOCAL) {
-    // enter local roster
-    socket.emit('enterLocal', localName);
-  } else {
-    // leave local roster
-    socket.emit('leaveLocal');
+      if (flightCount < maxFlights) {
+        setTimeout(flyPlane, 500);
+      } else {
+        setTimeout(() => {
+          document.getElementById('landing').style.opacity = '0';
+          setTimeout(() => {
+            document.getElementById('landing').style.display = 'none';
+            document.querySelector('.container').style.display = 'grid';
+          }, 1000);
+        }, 500);
+      }
+    }, 1500);
   }
-});
 
-/* ========================================================
-=  Online: Create / Join / Disband
-======================================================== */
-createBtn.addEventListener('click', () => {
-  const name = safeName(nameHost.value);
-  if (!name) return alert('Enter your name');
-
-  myName = name;
-  socket.emit('createGroup', { name, ttlMinutes: 10 }, ({ code, hostId: hId, openShare: os }) => {
-    currentRoom = code; hostId = hId; isHost = true; openShare = !!os;
-    // do NOT fill code into join input (requested)
-    setSessionUI({ code, roleText: 'Host', statusText: 'Active' });
-    peopleTitle.textContent = 'Members';
-  });
+  flyPlane();
 });
+// About modal
+const aboutBtn = document.getElementById('aboutBtn');
+const aboutModal = document.getElementById('aboutModal');
+const aboutClose = document.getElementById('aboutClose');
+const okAbout = document.getElementById('okAbout');
+document.getElementById('ver').textContent = VERSION;
+[aboutBtn].forEach(el => el.onclick = ()=>aboutModal.classList.remove('hidden'));
+[aboutClose, okAbout].forEach(el => el.onclick = ()=>aboutModal.classList.add('hidden'));
 
-joinBtn.addEventListener('click', () => {
-  const name = safeName(nameOnline.value);
-  const code = (joinCodeInput.value || '').trim();
-  if (!name || !code) return alert('Enter name and 6-digit code');
+// Typewriter tagline
+const TL = "Fast Enough to Make Wi-Fi Blush… Because Your Files Deserve a First-Class Trip. 📶😳🛫📂";
+(function typeTagline(){ const el = document.getElementById('tagline'); el.textContent=""; let i=0; (function tick(){ if (i<=TL.length){ el.textContent = TL.slice(0,i++); setTimeout(tick,14);} })(); })();
 
-  myName = name;
-  socket.emit('joinGroup', { name, code }, (res) => {
-    if (res.error) return alert(res.error);
-    currentRoom = code; hostId = res.hostId; isHost = false; openShare = !!res.openShare;
-    setSessionUI({ code, roleText: 'Member', statusText: 'Active' });
-    peopleTitle.textContent = 'Members';
-  });
-});
+// SPA nav
+document.getElementById('startApp').onclick = () => { document.querySelector('.landing').classList.add('hidden'); document.getElementById('app').classList.remove('hidden'); };
+document.getElementById('howWorks').onclick = () => document.getElementById('howSection').classList.toggle('hidden');
 
-disbandBtn.addEventListener('click', () => {
-  if (!isHost || !currentRoom) return;
-  socket.emit('disbandGroup', currentRoom);
-});
+// Helpers
+const $ = id => document.getElementById(id);
+const shortId = id => (id||"").slice(0,6).toUpperCase();
 
-/* Host-only: Open Share toggle */
-openShareSwitch.addEventListener('change', () => {
-  if (!isHost || !currentRoom) return;
-  socket.emit('setOpenShare', { code: currentRoom, value: openShareSwitch.checked });
-});
-
-/* ========================================================
-=  People roster updates
-======================================================== */
-socket.on('updateMembers', (members) => {
-  if (MODE_LOCAL) return; // ignore in local
-  people = Array.isArray(members) ? members : [];
-  renderPeople(people);
-});
-socket.on('localRoster', (roster) => {
-  if (!MODE_LOCAL) return;
-  people = Array.isArray(roster) ? roster : [];
-  renderPeople(people);
-});
-socket.on('openShareState', (value) => {
-  openShare = !!value;
-  openShareLabel.textContent = openShare ? '🟢 Open Share' : '🔒 Host-only sending';
-});
-
-/* ========================================================
-=  Chat (no double echo)
-======================================================== */
-function appendMsg({ you=false, name, text }) {
-  const line = document.createElement('div');
-  line.className = 'msg' + (you ? ' you' : '');
-  line.textContent = `${name}: ${text}`;
-  chatMessages.appendChild(line);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-  if (chatBox.hidden && !you) chatDot.style.display = 'block';
+// ---------- WebRTC base ----------
+const peers = {}; const channels = {};
+function ensurePeer(targetId){
+  if (peers[targetId]) return peers[targetId];
+  const pc = new RTCPeerConnection({ iceServers: [] }); // LAN-first
+  peers[targetId] = pc;
+  if (socket.id < targetId) { const ch = pc.createDataChannel("file"); setupChannel(targetId, ch); }
+  pc.ondatachannel = (e) => setupChannel(targetId, e.channel);
+  pc.onicecandidate = (e) => { if (e.candidate) socket.emit("signal", { targetId, data:{ candidate: e.candidate }}); };
+  return pc;
 }
-function sendChat() {
-  const text = (chatInput.value || '').trim();
-  if (!text) return;
-  // Local chat only makes sense in online rooms; still allow if local -> ephemeral
-  const name = myName || localName || 'Me';
-  appendMsg({ you:true, name, text });
-  if (currentRoom) socket.emit('chat', { room: currentRoom, name, text });
-  chatInput.value = '';
-}
-sendChatBtn.addEventListener('click', sendChat);
-chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
-socket.on('chat', ({ id, name, text }) => {
-  if (id === socket.id) return; // prevent duplicate
-  appendMsg({ name: name || 'Guest', text: text || '' });
-});
-
-chatFab.addEventListener('click', () => {
-  chatBox.hidden = !chatBox.hidden;
-  if (!chatBox.hidden) chatDot.style.display = 'none';
-});
-chatClose.addEventListener('click', () => chatBox.hidden = true);
-
-socket.on('groupDisbanded', (reason) => {
-  alert(`Group closed: ${reason || 'Closed'}`);
-  currentRoom = null; hostId = null; isHost = false; openShare = false;
-  sessionInfo.hidden = true; disbandBtn.hidden = true; openShareWrap.hidden = true;
-  people = []; renderPeople(people);
-});
-
-/* ========================================================
-=  Drag & Drop + Click to send (multi)
-======================================================== */
-let targetForSend = null; // socketId of selected person
-
-function chooseTargetAndPickFiles(targetId, targetName) {
-  // Permission (online)
-  if (!MODE_LOCAL && currentRoom) {
-    const iAmHost = isHost;
-    if (!openShare && !iAmHost && targetId !== hostId) {
-      return alert('Host-only sending is enabled. You can only send files to the host.');
-    }
-  }
-  targetForSend = targetId;
-  filePicker.value = ''; // reset
-  filePicker.click();
-}
-filePicker.addEventListener('change', () => {
-  if (!targetForSend || !filePicker.files?.length) return;
-  sendFilesTo(targetForSend, Array.from(filePicker.files));
-});
-
-['dragenter','dragover'].forEach(evt => {
-  document.addEventListener(evt, (e) => {
-    e.preventDefault(); e.stopPropagation();
-    dropOverlay.classList.add('show');
-  });
-});
-['dragleave','drop'].forEach(evt => {
-  document.addEventListener(evt, (e) => {
-    if (evt !== 'drop') e.preventDefault();
-    e.stopPropagation();
-    if (evt === 'drop') {
-      dropOverlay.classList.remove('show');
-      const dt = e.dataTransfer;
-      if (dt && dt.files && dt.files.length) {
-        if (!people.length) { alert('Pick a person first (click a card) then drop again.'); return; }
-        if (!targetForSend) { alert('Click a person to target, then drop files.'); return; }
-        sendFilesTo(targetForSend, Array.from(dt.files));
+function setupChannel(targetId, channel){
+  channels[targetId] = channel; channel.binaryType = "arraybuffer";
+  channel.onopen = ()=>console.log("DC open", targetId);
+  channel.onclose = ()=>console.log("DC close", targetId);
+  let incoming = null;
+  channel.onmessage = (e)=>{
+    if (typeof e.data === "string"){
+      const meta = JSON.parse(e.data);
+      if (meta.type==="meta"){
+        incoming = { name: meta.name, size: meta.size, chunks: [], received: 0, scope: meta.scope };
+        showProgress(meta.scope, `Receiving ${meta.name}`, 0, 0, meta.size);
+        playReceive();
       }
     } else {
-      // leave
-      if (e.target === document || e.target === document.body) dropOverlay.classList.remove('show');
+      if (!incoming) return;
+      incoming.chunks.push(e.data);
+      incoming.received += e.data.byteLength;
+      showProgress(incoming.scope, `Receiving ${incoming.name}`, incoming.received/incoming.size*100, incoming.received, incoming.size);
+      if (incoming.received >= incoming.size){
+        const blob = new Blob(incoming.chunks); const url = URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url; a.download=incoming.name; a.click(); hideProgress(incoming.scope); incoming=null;
+      }
     }
-  });
+  };
+}
+socket.on("signal", async ({ from, data }) => {
+  const pc = ensurePeer(from);
+  if (data.desc){ await pc.setRemoteDescription(data.desc);
+    if (data.desc.type==="offer"){ const answer=await pc.createAnswer(); await pc.setLocalDescription(answer);
+      socket.emit("signal", { targetId: from, data:{ desc: pc.localDescription }}); } }
+  else if (data.candidate){ try{ await pc.addIceCandidate(data.candidate);}catch(e){console.warn(e);} }
 });
+async function connectTo(targetId){ const pc = ensurePeer(targetId); const offer = await pc.createOffer(); await pc.setLocalDescription(offer); socket.emit("signal", { targetId, data:{ desc: pc.localDescription }}); }
 
-/* ========================================================
-=  File Transfer (Socket.IO relay)
-=  Local: 4MB chunks, Online: 64KB chunks
-======================================================== */
-const incoming = new Map(); // key = fromId|fileId -> { name, size, mime, parts:[], expected, received }
+// ---------- Online (code) ----------
+let group = { code:null, isHost:false, expiresAt:0, members:[], hostId:null };
+const peersOnline = $("peersOnline");
 
-function chunkSize() { return MODE_LOCAL ? 4*MB : 64*KB; }
-
-async function sendFilesTo(targetId, files) {
-  const room = MODE_LOCAL ? null : (currentRoom || null);
-
-  for (const file of files) {
-    const fileId = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-    const cBytes = chunkSize();
-    socket.emit('fileMeta', {
-      targetId, room, fileId,
-      name: file.name, size: file.size, mime: file.type || 'application/octet-stream',
-      chunkBytes: cBytes
-    });
-
-    // slice & send
-    let offset = 0, seq = 0;
-    while (offset < file.size) {
-      const end = Math.min(offset + cBytes, file.size);
-      const chunk = await file.slice(offset, end).arrayBuffer();
-      socket.emit('fileChunk', { targetId, fileId, seq, chunk });
-      offset = end; seq++;
-    }
-    socket.emit('fileComplete', { targetId, fileId });
-  }
+function renderOnlinePeers(){
+  peersOnline.innerHTML = "";
+  group.members.forEach(m => {
+    const d = document.createElement('div'); d.className="peer"+(m.id===socket.id?" me":""); d.dataset.id=m.id;
+    d.innerHTML = `<div>${(m.name||"?").slice(0,1).toUpperCase()}</div><div class="name">${m.name} (${shortId(m.id)})</div>`;
+    d.addEventListener("dragenter", e=>{e.preventDefault(); d.classList.add("drop");});
+    d.addEventListener("dragover", e=>e.preventDefault());
+    d.addEventListener("dragleave", ()=>d.classList.remove("drop"));
+    d.addEventListener("drop", e=>{ e.preventDefault(); d.classList.remove("drop"); const f=e.dataTransfer?.files?.[0]; if(f) sendFile([m.id], f, "online"); });
+    d.addEventListener("click", async ()=>{ if (m.id!==socket.id) await connectTo(m.id); });
+    peersOnline.appendChild(d);
+  });
+  group.members.forEach(m => { if (m.id!==socket.id && !peers[m.id]) connectTo(m.id); });
 }
 
-/* Receiving */
-socket.on('fileMeta', ({ fromId, fileId, name, size, mime, chunkBytes }) => {
-  const key = `${fromId}|${fileId}`;
-  incoming.set(key, { name, size, mime: mime || 'application/octet-stream', parts: [], received: 0 });
-  // Optional: show toast
-  appendMsg({ name: 'System', text: `Incoming: ${name} (${(size/MB).toFixed(2)} MB)` });
+function formatTime(ts){ if(!ts) return "no limit"; const left=ts-Date.now(); if(left<=0) return "expired"; const m=Math.floor(left/60000), s=Math.floor((left%60000)/1000); return `${m}:${String(s).padStart(2,"0")} left`; }
+
+$("createBtn").onclick = () => {
+  const name = $("nameOnline").value.trim(); if (!name) return alert("Enter your name");
+  const ttlMinutes = parseInt(localStorage.getItem("ttl") || $("ttlSelect").value,10);
+  group.isHost = true;
+  socket.emit("createGroup",{name, ttlMinutes}, ({code,expiresAt,hostId})=>{
+    group.code=code; group.expiresAt=expiresAt; group.hostId=hostId;
+    $("groupCode").textContent=code;
+    $("expires").textContent = ttlMinutes ? "Expires in "+formatTime(expiresAt) : "Unlimited";
+    $("groupArea").classList.remove("hidden"); $("disband").classList.remove("hidden");
+    $("onlineInfo").textContent = "Share the code with friends to join.";
+    localStorage.setItem("lastMode","online");
+    enableChat(code, name);
+  });
+};
+
+$("joinBtn").onclick = () => {
+  const name = $("nameOnline").value.trim(); const code = $("joinCode").value.trim();
+  if(!name || !code) return alert("Enter name and code");
+  socket.emit("joinGroup",{name, code}, (res)=>{
+    if(res?.error) return alert(res.error);
+    group.code=code; group.expiresAt=res.expiresAt; group.isHost=false; group.hostId=res.hostId;
+    $("groupCode").textContent=code; $("expires").textContent = res.expiresAt ? "Expires in "+formatTime(res.expiresAt) : "Unlimited";
+    $("groupArea").classList.remove("hidden"); $("disband").classList.add("hidden"); $("onlineInfo").textContent="Connected.";
+    localStorage.setItem("lastMode","online");
+    enableChat(code, name);
+  });
+};
+
+socket.on("updateMembers", (list)=>{ group.members=list; renderOnlinePeers(); });
+$("disband").onclick = ()=> socket.emit("disbandGroup", group.code);
+socket.on("groupDisbanded", (reason="Group closed")=>{ $("disbandReason").textContent=reason; $("disbanded").classList.remove("hidden"); $("app").classList.add("hidden"); });
+
+// Send to all (online)
+$("sendAll").onclick = () => {
+  const f = $("fileOnline").files[0]; if(!f) return alert("Choose a file");
+  const targets = group.members.filter(m=>m.id!==socket.id).map(m=>m.id);
+  sendFile(targets, f, "online");
+};
+
+// Allow page-level drop to send (when online panel visible)
+document.addEventListener("dragover", e=>e.preventDefault());
+document.addEventListener("drop", e=>{
+  const f = e.dataTransfer?.files?.[0];
+  if (!f) return;
+  const onlineVisible = !document.getElementById('onlinePanel').classList.contains('hidden');
+  if (onlineVisible && group.code){
+    const targets = group.members.filter(m => m.id !== socket.id).map(m => m.id);
+    sendFile(targets, f, "online");
+  }
 });
 
-socket.on('fileChunk', ({ fromId, fileId, seq, chunk }) => {
-  const key = `${fromId}|${fileId}`;
-  const rec = incoming.get(key);
-  if (!rec) return;
-  rec.parts.push(new Uint8Array(chunk));
-  rec.received += (chunk.byteLength || 0);
+// ---------- Local (auto-discovery) ----------
+let localState = { roster: [] };
+const peersLocal = $("peersLocal");
+function cuteName(){
+  const adj=["Golden","Sunny","Peachy","Bouncy","Chill","Lucky","Happy","Swift","Minty","Cozy","Snappy","Jazzy"];
+  const nouns=["Mango","Panda","Tiger","Dolphin","Falcon","Owl","Otter","Koala","Yak","Robin","Lynx","Orca"];
+  return `${adj[Math.floor(Math.random()*adj.length)]} ${nouns[Math.floor(Math.random()*nouns.length)]}`;
+}
+function renderLocalPeers(){
+  peersLocal.innerHTML = "";
+  localState.roster.forEach(p=>{
+    const d=document.createElement('div'); d.className="peer"+(p.id===socket.id?" me":""); d.dataset.id=p.id;
+    d.innerHTML = `<div>${(p.name||"?").slice(0,1).toUpperCase()}</div><div class="name">${p.name} (${shortId(p.id)})</div>`;
+    d.addEventListener("dragenter", e=>{e.preventDefault(); d.classList.add("drop");});
+    d.addEventListener("dragover", e=>e.preventDefault());
+    d.addEventListener("dragleave", ()=>d.classList.remove("drop"));
+    d.addEventListener("drop", e=>{ e.preventDefault(); d.classList.remove("drop"); const f=e.dataTransfer?.files?.[0]; if(f) sendFile([p.id], f, "local"); });
+    d.addEventListener("click", async ()=>{ if (p.id!==socket.id) await connectTo(p.id); });
+    peersLocal.appendChild(d);
+  });
+  localState.roster.forEach(p=>{ if (p.id!==socket.id && !peers[p.id]) connectTo(p.id); });
+}
+$("enterLocal").onclick = () => {
+  const name = $("nameLocal").value.trim() || cuteName(); $("nameLocal").value = name;
+  socket.emit("enterLocal", name);
+  $("enterLocal").classList.add("hidden"); $("leaveLocal").classList.remove("hidden");
+  $("localArea").classList.remove("hidden"); $("localInfo").textContent="Discovering devices on LAN...";
+  localStorage.setItem("lastMode","local");
+  enableChat("local", name);
+};
+$("leaveLocal").onclick = () => {
+  socket.emit("leaveLocal"); $("enterLocal").classList.remove("hidden"); $("leaveLocal").classList.add("hidden");
+  $("localArea").classList.add("hidden"); $("localInfo").textContent="Devices on this Wi-Fi will appear below.";
+  disableChat();
+};
+socket.on("localRoster", (roster)=>{ localState.roster = roster; renderLocalPeers(); });
+
+$("sendAllLocal").onclick = ()=>{
+  const f = $("fileLocal").files[0]; if(!f) return alert("Choose a file");
+  const targets = localState.roster.filter(p=>p.id!==socket.id).map(p=>p.id);
+  sendFile(targets, f, "local");
+};
+
+// ---------- Send + Progress + Sounds ----------
+function showProgress(scope, title, pct, bytes, total=0){
+  const wrap = scope==="online" ? $("progressWrap") : $("progressWrapLocal");
+  const bar  = scope==="online" ? $("progressBar")  : $("progressBarLocal");
+  const t    = scope==="online" ? $("progressTitle"): $("progressTitleLocal");
+  const s    = scope==="online" ? $("speedLine")    : $("speedLineLocal");
+  const runway = scope==="online" ? $("jet") : $("jetLocal");
+  wrap.classList.remove("hidden"); bar.style.width = `${Math.max(0,Math.min(100,pct)).toFixed(1)}%`; t.textContent = title;
+  if (total) s.textContent = `${fmt(bytes)} / ${fmt(total)}`;
+  if (pct===0){ runway.classList.remove("takeoff"); void runway.offsetWidth; runway.classList.add("takeoff"); rocketAcross(); }
+}
+function hideProgress(scope){ (scope==="online" ? $("progressWrap") : $("progressWrapLocal")).classList.add("hidden"); }
+function fmt(b){ if (b<1024) return b+" B"; const u=["KB","MB","GB","TB"]; let i=-1; do{ b/=1024; i++; } while(b>=1024 && i<u.length-1); return b.toFixed(1)+" "+u[i]; }
+
+function rocketAcross(){
+  const r = document.createElement('div'); r.textContent="🚀"; r.style.position="fixed"; r.style.left="-40px"; r.style.top="30%"; r.style.fontSize="28px"; r.style.transition="transform 1.6s ease-in-out"; r.style.zIndex="9999";
+  document.body.appendChild(r); requestAnimationFrame(()=>{ r.style.transform = `translateX(${window.innerWidth+80}px)`; });
+  setTimeout(()=>r.remove(), 1700);
+}
+function playSend(){ try{ const ctx=new (window.AudioContext||window.webkitAudioContext)(); const o=ctx.createOscillator(), g=ctx.createGain();
+  o.type="triangle"; o.frequency.setValueAtTime(440, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(880, ctx.currentTime+.15);
+  g.gain.setValueAtTime(0.0001, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.04, ctx.currentTime+.05); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+.25);
+  o.connect(g).connect(ctx.destination); o.start(); o.stop(ctx.currentTime+.26);}catch{} }
+function playReceive(){ try{ const ctx=new (window.AudioContext||window.webkitAudioContext)(); const o=ctx.createOscillator(), g=ctx.createGain();
+  o.type="sine"; o.frequency.setValueAtTime(660, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(330, ctx.currentTime+.2);
+  g.gain.setValueAtTime(0.0001, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.03, ctx.currentTime+.05); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+.28);
+  o.connect(g).connect(ctx.destination); o.start(); o.stop(ctx.currentTime+.3);}catch{} }
+
+function sendFile(targetIds, file, scope){
+  const outs = targetIds.map(id => channels[id]).filter(ch => ch && ch.readyState==="open");
+  if (outs.length===0){ alert("No connected peers yet. Tap a device bubble to connect, then try again."); return; }
+  const meta = JSON.stringify({ type:"meta", name:file.name, size:file.size, scope });
+  outs.forEach(ch=>ch.send(meta));
+  playSend();
+  const reader = file.stream().getReader();
+  let sent=0, total=file.size;
+  const pump = () => reader.read().then(({done, value}) => {
+    if (done){ hideProgress(scope); return; }
+    let offset=0;
+    while (offset < value.byteLength){
+      const chunk = value.buffer.slice(value.byteOffset + offset, value.byteOffset + Math.min(offset + 64*1024, value.byteLength));
+      outs.forEach(ch => ch.send(chunk));
+      sent += chunk.byteLength; offset += 64*1024;
+    }
+    showProgress(scope, `Sending ${file.name}`, sent/total*100, sent, total); pump();
+  });
+  showProgress(scope, `Sending ${file.name}`, 0, 0, total); pump();
+}
+
+// ---------- Mode toggle + persistence ----------
+const modeSwitch = $("modeSwitch"); const onlinePanel = $("onlinePanel"); const localPanel = $("localPanel");
+modeSwitch.addEventListener("change", ()=>{
+  const localOn = modeSwitch.checked;
+  $("modeLabel").textContent = localOn ? "📡 Local Mode" : "🌐 Online Mode";
+  localPanel.classList.toggle("hidden", !localOn); onlinePanel.classList.toggle("hidden", localOn);
+  localStorage.setItem("lastMode", localOn ? "local" : "online");
+  if (!localOn) socket.emit("leaveLocal");
 });
+const ttlSelect = $("ttlSelect"); ttlSelect.addEventListener("change", ()=>localStorage.setItem("ttl", ttlSelect.value));
+(function restore(){ const lastMode=localStorage.getItem("lastMode"); const ttl=localStorage.getItem("ttl"); if (ttl) ttlSelect.value=ttl; if (lastMode==="local"){ modeSwitch.checked=true; modeSwitch.dispatchEvent(new Event("change")); } })();
 
-socket.on('fileComplete', ({ fromId, fileId }) => {
-  const key = `${fromId}|${fileId}`;
-  const rec = incoming.get(key);
-  if (!rec) return;
-  const blob = new Blob(rec.parts, { type: rec.mime });
-  incoming.delete(key);
+// ---------- Chat (only when in a room) ----------
+const chatBtn=$("chatBtn"), chatPanel=$("chatPanel"), chatBody=$("chatBody"), chatInput=$("chatInput");
+document.getElementById("closeChat").onclick = ()=>chatPanel.classList.add("hidden");
+chatBtn.onclick = ()=>chatPanel.classList.toggle("hidden");
+$("chatSend").onclick = ()=>{
+  const text = chatInput.value.trim(); if(!text) return;
+  const name = $("nameOnline").value.trim() || $("nameLocal").value.trim() || "Me";
+  socket.emit("chat", { room: currentRoom(), name, text });
+  appendMsg({ me:true, name, text }); chatInput.value="";
+};
+socket.on("chat", (m)=>{ if (m.id===socket.id) return; appendMsg({ me:false, name:m.name, text:m.text }); });
 
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = rec.name || 'download';
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+function appendMsg({me, name, text}){
+  const d=document.createElement('div'); d.className="msg"+(me?" me":"");
+  d.innerHTML = `<b>${escapeHtml(name)}:</b> ${escapeHtml(text)}`;
+  chatBody.appendChild(d); chatBody.scrollTop = chatBody.scrollHeight;
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function currentRoom(){ return (!localPanel.classList.contains("hidden") ? "local" : (group.code || "lobby")); }
+function enableChat(room, name){
+  chatBtn.classList.remove("hidden");
+  chatPanel.classList.remove("hidden");
+  setTimeout(()=>chatPanel.classList.add("hidden"), 1000);
+  socket.emit("chat", { room, name, text:`${name} joined` });
+}
+function disableChat(){
+  chatBtn.classList.add("hidden");
+  chatPanel.classList.add("hidden");
+}
 
-  appendMsg({ name: 'System', text: `Saved: ${rec.name}` });
-});
-
-/* ========================================================
-=  Boot
-======================================================== */
-modeLabel.textContent = '🌐 Online Mode'; // default
-peopleTitle.textContent = 'Members';
-
-window.addEventListener('beforeunload', () => {
-  if (MODE_LOCAL) socket.emit('leaveLocal');
+/* ====== Input click/focus patch for join code ====== */
+document.addEventListener("DOMContentLoaded", () => {
+  const joinCodeInput = $("joinCode");
+  const row = joinCodeInput?.closest(".row");
+  if (row){
+    row.style.cursor = "text";
+    row.addEventListener("click", () => joinCodeInput.focus());
+  }
 });
