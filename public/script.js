@@ -140,7 +140,7 @@ createBtn.addEventListener('click', () => {
     currentRoom = code;
     hostId = hId;
     isHost = true;
-    joinCodeInput.value = code;
+    //joinCodeInput.value = code;
     setSessionUI({ code, roleText: 'Host', statusText: 'Active' });
   });
 });
