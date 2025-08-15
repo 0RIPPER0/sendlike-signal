@@ -1,7 +1,8 @@
-// SendLike — PWA UI + Local/Online toggle + WebRTC DC + Chat + Sounds
+// SendLike — PWA UI + Local/Online + WebRTC DC + Host controls + Chat bubble + Sounds
 const VERSION = "1.0.0";
 const socket = io();
 
+// PWA install
 let deferredPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault(); deferredPrompt = e;
@@ -15,21 +16,20 @@ const aboutModal = document.getElementById('aboutModal');
 const aboutClose = document.getElementById('aboutClose');
 const okAbout = document.getElementById('okAbout');
 document.getElementById('ver').textContent = VERSION;
-[aboutBtn, document.getElementById('cornerRocket')].forEach(el => el.onclick = ()=>aboutModal.classList.remove('hidden'));
+[aboutBtn].forEach(el => el.onclick = ()=>aboutModal.classList.remove('hidden'));
 [aboutClose, okAbout].forEach(el => el.onclick = ()=>aboutModal.classList.add('hidden'));
 
 // Typewriter tagline
 const TL = "Fast Enough to Make Wi-Fi Blush… Because Your Files Deserve a First-Class Trip. 📶😳🛫📂";
-function typeTagline(){ const el = document.getElementById('tagline'); el.textContent=""; let i=0; (function tick(){ if (i<=TL.length){ el.textContent = TL.slice(0,i++); setTimeout(tick,14);} })(); }
-typeTagline();
+(function typeTagline(){ const el = document.getElementById('tagline'); el.textContent=""; let i=0; (function tick(){ if (i<=TL.length){ el.textContent = TL.slice(0,i++); setTimeout(tick,14);} })(); })();
 
 // SPA nav
 document.getElementById('startApp').onclick = () => { document.querySelector('.landing').classList.add('hidden'); document.getElementById('app').classList.remove('hidden'); };
 document.getElementById('howWorks').onclick = () => document.getElementById('howSection').classList.toggle('hidden');
 
-// ---------- Helpers ----------
+// Helpers
 const $ = id => document.getElementById(id);
-function shortId(id){ return (id||"").slice(0,6).toUpperCase(); }
+const shortId = id => (id||"").slice(0,6).toUpperCase();
 
 // ---------- WebRTC base ----------
 const peers = {}; const channels = {};
@@ -77,8 +77,9 @@ socket.on("signal", async ({ from, data }) => {
 async function connectTo(targetId){ const pc = ensurePeer(targetId); const offer = await pc.createOffer(); await pc.setLocalDescription(offer); socket.emit("signal", { targetId, data:{ desc: pc.localDescription }}); }
 
 // ---------- Online (code) ----------
-let group = { code:null, isHost:false, expiresAt:0, members:[] };
+let group = { code:null, isHost:false, expiresAt:0, members:[], hostId:null };
 const peersOnline = $("peersOnline");
+
 function renderOnlinePeers(){
   peersOnline.innerHTML = "";
   group.members.forEach(m => {
@@ -93,45 +94,55 @@ function renderOnlinePeers(){
   });
   group.members.forEach(m => { if (m.id!==socket.id && !peers[m.id]) connectTo(m.id); });
 }
+
 function formatTime(ts){ if(!ts) return "no limit"; const left=ts-Date.now(); if(left<=0) return "expired"; const m=Math.floor(left/60000), s=Math.floor((left%60000)/1000); return `${m}:${String(s).padStart(2,"0")} left`; }
+
 $("createBtn").onclick = () => {
   const name = $("nameOnline").value.trim(); if (!name) return alert("Enter your name");
   const ttlMinutes = parseInt(localStorage.getItem("ttl") || $("ttlSelect").value,10);
   group.isHost = true;
-  socket.emit("createGroup",{name, ttlMinutes}, ({code,expiresAt})=>{
-    group.code=code; group.expiresAt=expiresAt; $("groupCode").textContent=code;
+  socket.emit("createGroup",{name, ttlMinutes}, ({code,expiresAt,hostId})=>{
+    group.code=code; group.expiresAt=expiresAt; group.hostId=hostId;
+    $("groupCode").textContent=code;
     $("expires").textContent = ttlMinutes ? "Expires in "+formatTime(expiresAt) : "Unlimited";
     $("groupArea").classList.remove("hidden"); $("disband").classList.remove("hidden");
-    $("onlineInfo").textContent = "Share the code with friends to join."; localStorage.setItem("lastMode","online");
-    joinChatRoom(code, name);
+    $("onlineInfo").textContent = "Share the code with friends to join.";
+    localStorage.setItem("lastMode","online");
+    enableChat(code, name);
   });
 };
+
 $("joinBtn").onclick = () => {
   const name = $("nameOnline").value.trim(); const code = $("joinCode").value.trim();
   if(!name || !code) return alert("Enter name and code");
   socket.emit("joinGroup",{name, code}, (res)=>{
     if(res?.error) return alert(res.error);
-    group.code=code; group.expiresAt=res.expiresAt; group.isHost=false;
+    group.code=code; group.expiresAt=res.expiresAt; group.isHost=false; group.hostId=res.hostId;
     $("groupCode").textContent=code; $("expires").textContent = res.expiresAt ? "Expires in "+formatTime(res.expiresAt) : "Unlimited";
-    $("groupArea").classList.remove("hidden"); $("disband").classList.add("hidden"); $("onlineInfo").textContent="Connected."; localStorage.setItem("lastMode","online");
-    joinChatRoom(code, name);
+    $("groupArea").classList.remove("hidden"); $("disband").classList.add("hidden"); $("onlineInfo").textContent="Connected.";
+    localStorage.setItem("lastMode","online");
+    enableChat(code, name);
   });
 };
+
 socket.on("updateMembers", (list)=>{ group.members=list; renderOnlinePeers(); });
 $("disband").onclick = ()=> socket.emit("disbandGroup", group.code);
 socket.on("groupDisbanded", (reason="Group closed")=>{ $("disbandReason").textContent=reason; $("disbanded").classList.remove("hidden"); $("app").classList.add("hidden"); });
 
-// Online send
+// Send to all (online)
 $("sendAll").onclick = () => {
   const f = $("fileOnline").files[0]; if(!f) return alert("Choose a file");
   const targets = group.members.filter(m=>m.id!==socket.id).map(m=>m.id);
   sendFile(targets, f, "online");
 };
+
+// Allow page-level drop to send (when online panel visible)
 document.addEventListener("dragover", e=>e.preventDefault());
 document.addEventListener("drop", e=>{
   const f = e.dataTransfer?.files?.[0];
+  if (!f) return;
   const onlineVisible = !document.getElementById('onlinePanel').classList.contains('hidden');
-  if (f && onlineVisible && group.code){
+  if (onlineVisible && group.code){
     const targets = group.members.filter(m => m.id !== socket.id).map(m => m.id);
     sendFile(targets, f, "online");
   }
@@ -165,11 +176,12 @@ $("enterLocal").onclick = () => {
   $("enterLocal").classList.add("hidden"); $("leaveLocal").classList.remove("hidden");
   $("localArea").classList.remove("hidden"); $("localInfo").textContent="Discovering devices on LAN...";
   localStorage.setItem("lastMode","local");
-  joinChatRoom("local", name);
+  enableChat("local", name);
 };
 $("leaveLocal").onclick = () => {
   socket.emit("leaveLocal"); $("enterLocal").classList.remove("hidden"); $("leaveLocal").classList.add("hidden");
   $("localArea").classList.add("hidden"); $("localInfo").textContent="Devices on this Wi-Fi will appear below.";
+  disableChat();
 };
 socket.on("localRoster", (roster)=>{ localState.roster = roster; renderLocalPeers(); });
 
@@ -198,19 +210,14 @@ function rocketAcross(){
   document.body.appendChild(r); requestAnimationFrame(()=>{ r.style.transform = `translateX(${window.innerWidth+80}px)`; });
   setTimeout(()=>r.remove(), 1700);
 }
-
-function playSend(){
-  try{ const ctx=new (window.AudioContext||window.webkitAudioContext)(); const o=ctx.createOscillator(), g=ctx.createGain();
-    o.type="triangle"; o.frequency.setValueAtTime(440, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(880, ctx.currentTime+.15);
-    g.gain.setValueAtTime(0.0001, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.04, ctx.currentTime+.05); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+.25);
-    o.connect(g).connect(ctx.destination); o.start(); o.stop(ctx.currentTime+.26);}catch{}
-}
-function playReceive(){
-  try{ const ctx=new (window.AudioContext||window.webkitAudioContext)(); const o=ctx.createOscillator(), g=ctx.createGain();
-    o.type="sine"; o.frequency.setValueAtTime(660, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(330, ctx.currentTime+.2);
-    g.gain.setValueAtTime(0.0001, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.03, ctx.currentTime+.05); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+.28);
-    o.connect(g).connect(ctx.destination); o.start(); o.stop(ctx.currentTime+.3);}catch{}
-}
+function playSend(){ try{ const ctx=new (window.AudioContext||window.webkitAudioContext)(); const o=ctx.createOscillator(), g=ctx.createGain();
+  o.type="triangle"; o.frequency.setValueAtTime(440, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(880, ctx.currentTime+.15);
+  g.gain.setValueAtTime(0.0001, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.04, ctx.currentTime+.05); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+.25);
+  o.connect(g).connect(ctx.destination); o.start(); o.stop(ctx.currentTime+.26);}catch{} }
+function playReceive(){ try{ const ctx=new (window.AudioContext||window.webkitAudioContext)(); const o=ctx.createOscillator(), g=ctx.createGain();
+  o.type="sine"; o.frequency.setValueAtTime(660, ctx.currentTime); o.frequency.exponentialRampToValueAtTime(330, ctx.currentTime+.2);
+  g.gain.setValueAtTime(0.0001, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.03, ctx.currentTime+.05); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+.28);
+  o.connect(g).connect(ctx.destination); o.start(); o.stop(ctx.currentTime+.3);}catch{} }
 
 function sendFile(targetIds, file, scope){
   const outs = targetIds.map(id => channels[id]).filter(ch => ch && ch.readyState==="open");
@@ -233,7 +240,7 @@ function sendFile(targetIds, file, scope){
   showProgress(scope, `Sending ${file.name}`, 0, 0, total); pump();
 }
 
-// Mode toggle + persistence
+// ---------- Mode toggle + persistence ----------
 const modeSwitch = $("modeSwitch"); const onlinePanel = $("onlinePanel"); const localPanel = $("localPanel");
 modeSwitch.addEventListener("change", ()=>{
   const localOn = modeSwitch.checked;
@@ -245,44 +252,42 @@ modeSwitch.addEventListener("change", ()=>{
 const ttlSelect = $("ttlSelect"); ttlSelect.addEventListener("change", ()=>localStorage.setItem("ttl", ttlSelect.value));
 (function restore(){ const lastMode=localStorage.getItem("lastMode"); const ttl=localStorage.getItem("ttl"); if (ttl) ttlSelect.value=ttl; if (lastMode==="local"){ modeSwitch.checked=true; modeSwitch.dispatchEvent(new Event("change")); } })();
 
-// PWA SW
-if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(console.warn); }); }
-
-// ---------- Chat ----------
+// ---------- Chat (only when in a room) ----------
 const chatBtn=$("chatBtn"), chatPanel=$("chatPanel"), chatBody=$("chatBody"), chatInput=$("chatInput");
 document.getElementById("closeChat").onclick = ()=>chatPanel.classList.add("hidden");
 chatBtn.onclick = ()=>chatPanel.classList.toggle("hidden");
-$("chatSend").onclick = ()=>{ const text = chatInput.value.trim(); if(!text) return; const name = $("nameOnline").value.trim() || $("nameLocal").value.trim() || "Me"; socket.emit("chat", { room: currentRoom(), name, text }); appendMsg({ me:true, name, text }); chatInput.value=""; };
+$("chatSend").onclick = ()=>{
+  const text = chatInput.value.trim(); if(!text) return;
+  const name = $("nameOnline").value.trim() || $("nameLocal").value.trim() || "Me";
+  socket.emit("chat", { room: currentRoom(), name, text });
+  appendMsg({ me:true, name, text }); chatInput.value="";
+};
 socket.on("chat", (m)=>{ if (m.id===socket.id) return; appendMsg({ me:false, name:m.name, text:m.text }); });
+
 function appendMsg({me, name, text}){
-  const d=document.createElement('div'); d.className="msg"+(me?" me":""); d.innerHTML = `<b>${name}:</b> ${escapeHtml(text)}`; chatBody.appendChild(d); chatBody.scrollTop = chatBody.scrollHeight;
+  const d=document.createElement('div'); d.className="msg"+(me?" me":"");
+  d.innerHTML = `<b>${escapeHtml(name)}:</b> ${escapeHtml(text)}`;
+  chatBody.appendChild(d); chatBody.scrollTop = chatBody.scrollHeight;
 }
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function currentRoom(){ return (!localPanel.classList.contains("hidden") ? "local" : (group.code || "lobby")); }
-function joinChatRoom(room, name){ socket.emit("chat", { room, name, text: `${name} joined` }); chatBtn.classList.remove("hidden"); chatPanel.classList.remove("hidden"); setTimeout(()=>chatPanel.classList.add("hidden"), 1200); }
+function enableChat(room, name){
+  chatBtn.classList.remove("hidden");
+  chatPanel.classList.remove("hidden");
+  setTimeout(()=>chatPanel.classList.add("hidden"), 1000);
+  socket.emit("chat", { room, name, text:`${name} joined` });
+}
+function disableChat(){
+  chatBtn.classList.add("hidden");
+  chatPanel.classList.add("hidden");
+}
 
-/* ================================
-   PATCH: Make all key inputs fully clickable
-   ================================ */
-document.addEventListener("DOMContentLoaded", function () {
-  const clickableInputs = ["yourName", "localCode", "joinCode"];
-
-  clickableInputs.forEach(id => {
-    const inputEl = document.getElementById(id);
-    if (inputEl) {
-      const clickableArea = inputEl.closest(".row") || inputEl.parentElement;
-
-      if (clickableArea) {
-        clickableArea.style.cursor = "text";
-        clickableArea.addEventListener("click", () => {
-          inputEl.focus();
-        });
-      }
-
-      // Auto-select content on focus
-      inputEl.addEventListener("focus", function () {
-        this.select();
-      });
-    }
-  });
+/* ====== Input click/focus patch for join code ====== */
+document.addEventListener("DOMContentLoaded", () => {
+  const joinCodeInput = $("joinCode");
+  const row = joinCodeInput?.closest(".row");
+  if (row){
+    row.style.cursor = "text";
+    row.addEventListener("click", () => joinCodeInput.focus());
+  }
 });
