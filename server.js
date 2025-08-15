@@ -1,3 +1,5 @@
+// SendLike — Server (Express + Socket.IO)
+// Features: 6-digit groups, disband, timer, local roster for same Wi-Fi, chat relay.
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -5,68 +7,106 @@ const path = require("path");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, { cors: { origin: "*" } });
 
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "..", "public")));
 
-let groups = {};
+let groups = {};        // code -> { hostId, createdAt, ttlMs, members:[{id,name}], timer }
+let localPeers = new Map(); // socketId -> { name }
 
-function generateGroupCode() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+function genCode(){ return Math.floor(100000 + Math.random() * 900000).toString(); }
+function shortId(id){ return id.slice(0,6).toUpperCase(); }
+
+function disbandGroup(code, reason="Group closed"){
+  const g = groups[code];
+  if (!g) return;
+  io.to(code).emit("groupDisbanded", reason);
+  clearTimeout(g.timer);
+  delete groups[code];
+  console.log("[Group] Disband", code, reason);
+}
+
+function startGroupTimer(code){
+  const g = groups[code];
+  if (!g) return;
+  clearTimeout(g.timer);
+  if (g.ttlMs > 0) g.timer = setTimeout(() => disbandGroup(code, "Time limit reached"), g.ttlMs);
+}
+
+function pushLocalRoster(){
+  const roster = Array.from(localPeers.entries()).map(([id, o]) => ({
+    id, name: o.name
+  }));
+  io.to("local").emit("localRoster", roster);
 }
 
 io.on("connection", (socket) => {
-    console.log("User connected:", socket.id);
+  // ---- Online mode (code) ----
+  socket.on("createGroup", ({ name, ttlMinutes = 10 }, cb = ()=>{}) => {
+    const code = genCode();
+    const ttlMs = ttlMinutes === 0 ? 0 : Math.max(0, (ttlMinutes||10) * 60 * 1000);
+    const createdAt = Date.now();
+    groups[code] = { hostId: socket.id, createdAt, ttlMs, members: [{ id: socket.id, name }], timer: null };
+    socket.join(code);
+    startGroupTimer(code);
+    cb({ code, expiresAt: ttlMs ? createdAt + ttlMs : 0 });
+    io.to(code).emit("updateMembers", groups[code].members);
+  });
 
-    socket.on("createGroup", (name) => {
-        let code = generateGroupCode();
-        groups[code] = { hostId: socket.id, members: [{ id: socket.id, name }] };
-        socket.join(code);
-        socket.emit("groupCreated", { code, members: groups[code].members });
-        console.log(`Group ${code} created by ${name}`);
-    });
+  socket.on("joinGroup", ({ name, code }, cb = ()=>{}) => {
+    const g = groups[code];
+    if (!g) return cb({ error: "Group not found" });
+    g.members.push({ id: socket.id, name });
+    socket.join(code);
+    io.to(code).emit("updateMembers", g.members);
+    cb({ ok: true, expiresAt: g.ttlMs ? g.createdAt + g.ttlMs : 0, hostId: g.hostId });
+  });
 
-    socket.on("joinGroup", ({ name, code }) => {
-        if (!groups[code]) {
-            socket.emit("errorMsg", "Group not found");
-            return;
-        }
-        groups[code].members.push({ id: socket.id, name });
-        socket.join(code);
-        io.to(code).emit("updateMembers", groups[code].members);
-        console.log(`${name} joined group ${code}`);
-    });
+  socket.on("disbandGroup", (code) => {
+    const g = groups[code];
+    if (!g || g.hostId !== socket.id) return;
+    disbandGroup(code, "Host disbanded");
+  });
 
-    socket.on("sendFile", ({ code, fileName, fileBuffer }) => {
-        if (!groups[code]) return;
-        socket.to(code).emit("receiveFile", { fileName, fileBuffer });
-    });
+  // group chat
+  socket.on("chat", ({ room, name, text }) => {
+    if (!text || !room) return;
+    io.to(room).emit("chat", { id: socket.id, name, text, ts: Date.now() });
+  });
 
-    socket.on("disbandGroup", (code) => {
-        if (!groups[code] || groups[code].hostId !== socket.id) return;
-        io.to(code).emit("groupDisbanded");
-        delete groups[code];
-        console.log(`Group ${code} disbanded`);
-    });
+  // ---- Local mode (same Wi-Fi discovery) ----
+  socket.on("enterLocal", (name) => {
+    localPeers.set(socket.id, { name });
+    socket.join("local");
+    pushLocalRoster();
+  });
+  socket.on("leaveLocal", () => {
+    socket.leave("local");
+    localPeers.delete(socket.id);
+    pushLocalRoster();
+  });
 
-    socket.on("disconnect", () => {
-        for (let code in groups) {
-            let group = groups[code];
-            let index = group.members.findIndex((m) => m.id === socket.id);
-            if (index !== -1) {
-                group.members.splice(index, 1);
-                io.to(code).emit("updateMembers", group.members);
-                if (socket.id === group.hostId) {
-                    io.to(code).emit("groupDisbanded");
-                    delete groups[code];
-                }
-            }
-        }
-        console.log("User disconnected:", socket.id);
+  // ---- WebRTC signaling (shared) ----
+  socket.on("signal", ({ targetId, data }) => {
+    io.to(targetId).emit("signal", { from: socket.id, data });
+  });
+
+  socket.on("disconnect", () => {
+    if (localPeers.has(socket.id)) { localPeers.delete(socket.id); pushLocalRoster(); }
+    Object.keys(groups).forEach(code => {
+      const g = groups[code];
+      if (!g) return;
+      const idx = g.members.findIndex(m => m.id === socket.id);
+      if (idx !== -1) {
+        const wasHost = g.hostId === socket.id;
+        g.members.splice(idx, 1);
+        if (wasHost) disbandGroup(code, "Host left");
+        else io.to(code).emit("updateMembers", g.members);
+      }
     });
+  });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log("[SendLike] Listening on", PORT));
