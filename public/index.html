@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>SendLike Group</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>SendLike</h1>
+
+    <div id="startScreen">
+        <input id="nameInput" placeholder="Enter your name">
+        <button onclick="createGroup()">Create Group</button>
+        <br><br>
+        <input id="joinCodeInput" placeholder="Enter group code">
+        <button onclick="joinGroup()">Join Group</button>
+    </div>
+
+    <div id="groupScreen" style="display:none;">
+        <h2>Group Code: <span id="groupCode"></span></h2>
+        <div id="membersList" class="members"></div>
+        <br>
+        <input type="file" id="fileInput">
+        <button onclick="sendFile()">Send File to All</button>
+        <br><br>
+        <button id="disbandBtn" style="display:none;" onclick="disbandGroup()">Disband Group</button>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
