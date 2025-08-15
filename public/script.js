@@ -260,3 +260,26 @@ function appendMsg({me, name, text}){
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function currentRoom(){ return (!localPanel.classList.contains("hidden") ? "local" : (group.code || "lobby")); }
 function joinChatRoom(room, name){ socket.emit("chat", { room, name, text: `${name} joined` }); chatBtn.classList.remove("hidden"); chatPanel.classList.remove("hidden"); setTimeout(()=>chatPanel.classList.add("hidden"), 1200); }
+
+/* ================================
+   PATCH: Fix join code click/focus
+   ================================ */
+document.addEventListener("DOMContentLoaded", function () {
+  const joinCodeInput = document.getElementById("joinCode");
+  if (joinCodeInput) {
+    // Find the nearest clickable container
+    const clickableArea = joinCodeInput.closest(".row") || joinCodeInput.parentElement;
+
+    if (clickableArea) {
+      clickableArea.style.cursor = "text";
+      clickableArea.addEventListener("click", () => {
+        joinCodeInput.focus();
+      });
+    }
+
+    // Optional: auto-select text when focusing
+    joinCodeInput.addEventListener("focus", function () {
+      this.select();
+    });
+  }
+});
