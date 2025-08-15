@@ -22,13 +22,14 @@
     </header>
 
     <!-- Mode Toggle -->
-    <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
-      <div>
-        <label>
-          <span>🌐 Online Mode</span>
-          <input type="checkbox" id="modeToggle" style="margin: 0 10px;">
-          <span>📡 Local Mode</span>
+    <div class="card form-row" style="justify-content: space-between;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span>🌐 Online Mode</span>
+        <label class="toggle">
+          <input type="checkbox" id="modeToggle">
+          <span class="slider"></span>
         </label>
+        <span>📡 Local Mode</span>
       </div>
       <div>
         Session limit:
@@ -44,7 +45,7 @@
     <!-- Join Group Section -->
     <div class="card">
       <h2>Online (with Code)</h2>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; align-items: center;">
+      <div class="form-row">
         <input id="nameInput" type="text" placeholder="Your name">
         <input id="codeInput" type="text" placeholder="6-digit code" maxlength="6">
         <button onclick="joinGroup()">Join Group</button>
@@ -54,8 +55,10 @@
     <!-- Create Group Section -->
     <div class="card">
       <h2>Create a New Group</h2>
-      <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center;">
+      <div class="form-row" style="margin-bottom: 1rem;">
         <input id="hostName" type="text" placeholder="Your name">
+      </div>
+      <div class="form-row">
         <button onclick="createGroup()">Create Group</button>
       </div>
     </div>
@@ -64,7 +67,7 @@
     <div id="chatSection" class="card" style="display:none;">
       <h2>Group Chat</h2>
       <div id="chatMessages" style="height:200px; overflow-y:auto; background:rgba(255,255,255,0.3); border-radius:10px; padding:1rem; margin-bottom:1rem;"></div>
-      <div style="display:grid; grid-template-columns: 1fr auto; gap:1rem;">
+      <div class="form-row">
         <input id="chatInput" type="text" placeholder="Type a message...">
         <button onclick="sendChat()">Send</button>
       </div>
