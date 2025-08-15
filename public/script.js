@@ -190,10 +190,16 @@ createBtn.addEventListener('click', () => {
 
   myName = name;
   socket.emit('createGroup', { name, ttlMinutes: 10 }, ({ code, hostId: hId, openShare: os }) => {
-    currentRoom = code; hostId = hId; isHost = true; openShare = !!os;
-    // do NOT fill code into join input (requested)
+    currentRoom = code; 
+    hostId = hId; 
+    isHost = true; 
+    openShare = !!os;
     setSessionUI({ code, roleText: 'Host', statusText: 'Active' });
     peopleTitle.textContent = 'Members';
+
+    // Host keeps "Join" hidden, but we leave Create hidden too since group is already made
+    cardOnlineJoin.hidden = true;
+    cardOnlineCreate.hidden = true;
   });
 });
 
@@ -205,9 +211,16 @@ joinBtn.addEventListener('click', () => {
   myName = name;
   socket.emit('joinGroup', { name, code }, (res) => {
     if (res.error) return alert(res.error);
-    currentRoom = code; hostId = res.hostId; isHost = false; openShare = !!res.openShare;
+    currentRoom = code; 
+    hostId = res.hostId; 
+    isHost = false; 
+    openShare = !!res.openShare;
     setSessionUI({ code, roleText: 'Member', statusText: 'Active' });
     peopleTitle.textContent = 'Members';
+
+    // 🔹 Hide join/create UI for members to prevent spam
+    cardOnlineJoin.hidden = true;
+    cardOnlineCreate.hidden = true;
   });
 });
 
