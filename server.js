@@ -49,7 +49,7 @@ function startGroupTimer(code) {
     g.timer = setTimeout(() => {
       // Only stop new joins; group persists for members.
       g.ttlMs = 0; // expired join window
-      io.to(code).emit("joinClosed");
+      io.to(code).emit("joinClosed"); // Inform clients UI if needed
       console.log("[Group] Join window closed", code);
     }, g.ttlMs);
   }
@@ -73,7 +73,7 @@ io.on("connection", (socket) => {
       hostId: socket.id,
       createdAt,
       ttlMs,
-      openShare: false,
+      openShare: false, // default host-only send
       members: [{ id: socket.id, name: name || "Host" }],
       timer: null
     };
@@ -126,45 +126,49 @@ io.on("connection", (socket) => {
     pushLocalRoster();
   });
 
-  /* ---- FILE RELAY with ACK ---- */
-  socket.on("fileMeta", (p, ack) => {
+  /* ---- FILE RELAY ----
+     Flow:
+       sender -> server: fileMeta({targetId, room?, fileId, name, size, mime, chunkBytes})
+       server -> target: fileMeta({fromId, ...})
+       sender -> server: fileChunk({targetId, fileId, seq, chunk})   (chunk = ArrayBuffer)
+       server -> target: fileChunk({fromId, fileId, seq, chunk})
+       sender -> server: fileComplete({targetId, fileId})
+       server -> target: fileComplete({fromId, fileId})
+  -------------------------------- */
+  socket.on("fileMeta", (p) => {
     const { targetId, room, fileId, name, size, mime, chunkBytes } = p || {};
-    if (!targetId || !fileId || !name || !size) { if (ack) ack({ ok: false }); return; }
+    if (!targetId || !fileId || !name || !size) return;
 
-    // Permission check
+    // Permission: if room present -> enforce openShare
     if (room && groups[room]) {
       const g = groups[room];
       const isHost = socket.id === g.hostId;
-      if (!g.openShare && !isHost && targetId !== g.hostId) {
-        if (ack) ack({ ok: false, reason: "Not allowed" });
-        return;
+      if (!g.openShare && !isHost) {
+        // Optional: allow members to send to host only
+        if (targetId !== g.hostId) return; // drop silently
       }
     }
-
     io.to(targetId).emit("fileMeta", { fromId: socket.id, fileId, name, size, mime, chunkBytes });
-    if (ack) ack({ ok: true });
   });
 
-  socket.on("fileChunk", (p, ack) => {
+  socket.on("fileChunk", (p) => {
     const { targetId, fileId, seq, chunk } = p || {};
-    if (!targetId || !fileId || typeof seq !== "number" || !chunk) { if (ack) ack({ ok: false }); return; }
-
+    if (!targetId || !fileId || typeof seq !== "number" || !chunk) return;
     io.to(targetId).emit("fileChunk", { fromId: socket.id, fileId, seq, chunk });
-    if (ack) ack({ ok: true });
   });
 
-  socket.on("fileComplete", (p, ack) => {
+  socket.on("fileComplete", (p) => {
     const { targetId, fileId } = p || {};
-    if (!targetId || !fileId) { if (ack) ack({ ok: false }); return; }
-
+    if (!targetId || !fileId) return;
     io.to(targetId).emit("fileComplete", { fromId: socket.id, fileId });
-    if (ack) ack({ ok: true });
   });
 
   /* ---- DISCONNECT CLEANUP ---- */
   socket.on("disconnect", () => {
+    // local roster
     if (localPeers.has(socket.id)) { localPeers.delete(socket.id); pushLocalRoster(); }
 
+    // groups
     Object.keys(groups).forEach(code => {
       const g = groups[code];
       if (!g) return;
