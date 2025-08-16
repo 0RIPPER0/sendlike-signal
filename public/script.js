@@ -91,7 +91,6 @@ function loopPlane() {
   if (!plane || !trail) return;
   plane.style.animation = 'none';
   trail.style.animation = 'none';
-  // reflow
   void plane.offsetWidth; void trail.offsetWidth;
   plane.style.animation = 'planeCurve 1.5s ease-in forwards';
   trail.style.animation = 'contrailFade 1.5s ease-in forwards';
@@ -120,20 +119,18 @@ function setSessionUI({ code, roleText, statusText }) {
   sessionStatus.textContent = statusText || 'Active';
   sessionInfo.hidden = false;
   disbandBtn.hidden = !isHost;
-  // show OpenShare toggle only if host + online mode
   openShareWrap.hidden = !(isHost && !MODE_LOCAL && currentRoom);
   openShareLabel.textContent = openShare ? '🟢 Open Share' : '🔒 Host-only sending';
   openShareSwitch.checked = !!openShare;
 }
 function avatarColor(seed) {
-  // simple deterministic pastel
   let h = 0; for (let i=0;i<seed.length;i++) h = (h*31 + seed.charCodeAt(i)) % 360;
   return `hsl(${h}deg 70% 55%)`;
 }
 function renderPeople(list) {
   peopleList.innerHTML = '';
   list.forEach(p => {
-    if (MODE_LOCAL && p.id === mySocketId) return; // don't show self in local roster
+    if (MODE_LOCAL && p.id === mySocketId) return;
     const card = document.createElement('div');
     card.className = 'person';
     card.dataset.id = p.id;
@@ -160,23 +157,19 @@ modeSwitch.addEventListener('change', () => {
   MODE_LOCAL = modeSwitch.checked;
   modeLabel.textContent = MODE_LOCAL ? '📡 Local Mode' : '🌐 Online Mode';
 
-  // UI show/hide
   cardOnlineJoin.hidden = MODE_LOCAL;
   cardOnlineCreate.hidden = MODE_LOCAL;
-  sessionInfo.hidden = MODE_LOCAL; // no group session UI for local
+  sessionInfo.hidden = MODE_LOCAL;
   disbandBtn.hidden = true;
   openShareWrap.hidden = true;
   currentRoom = null; hostId = null; isHost = false; openShare = false;
 
-  // People title
   peopleTitle.textContent = MODE_LOCAL ? 'Nearby Devices' : 'Members';
   peopleList.innerHTML = '';
 
   if (MODE_LOCAL) {
-    // enter local roster
     socket.emit('enterLocal', localName);
   } else {
-    // leave local roster
     socket.emit('leaveLocal');
   }
 });
@@ -191,7 +184,6 @@ createBtn.addEventListener('click', () => {
   myName = name;
   socket.emit('createGroup', { name, ttlMinutes: 10 }, ({ code, hostId: hId, openShare: os }) => {
     currentRoom = code; hostId = hId; isHost = true; openShare = !!os;
-    // do NOT fill code into join input (requested)
     setSessionUI({ code, roleText: 'Host', statusText: 'Active' });
     peopleTitle.textContent = 'Members';
   });
@@ -216,7 +208,6 @@ disbandBtn.addEventListener('click', () => {
   socket.emit('disbandGroup', currentRoom);
 });
 
-/* Host-only: Open Share toggle */
 openShareSwitch.addEventListener('change', () => {
   if (!isHost || !currentRoom) return;
   socket.emit('setOpenShare', { code: currentRoom, value: openShareSwitch.checked });
@@ -226,7 +217,7 @@ openShareSwitch.addEventListener('change', () => {
 =  People roster updates
 ======================================================== */
 socket.on('updateMembers', (members) => {
-  if (MODE_LOCAL) return; // ignore in local
+  if (MODE_LOCAL) return;
   people = Array.isArray(members) ? members : [];
   renderPeople(people);
 });
@@ -241,7 +232,7 @@ socket.on('openShareState', (value) => {
 });
 
 /* ========================================================
-=  Chat (no double echo)
+=  Chat
 ======================================================== */
 function appendMsg({ you=false, name, text }) {
   const line = document.createElement('div');
@@ -254,7 +245,6 @@ function appendMsg({ you=false, name, text }) {
 function sendChat() {
   const text = (chatInput.value || '').trim();
   if (!text) return;
-  // Local chat only makes sense in online rooms; still allow if local -> ephemeral
   const name = myName || localName || 'Me';
   appendMsg({ you:true, name, text });
   if (currentRoom) socket.emit('chat', { room: currentRoom, name, text });
@@ -263,7 +253,7 @@ function sendChat() {
 sendChatBtn.addEventListener('click', sendChat);
 chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
 socket.on('chat', ({ id, name, text }) => {
-  if (id === socket.id) return; // prevent duplicate
+  if (id === socket.id) return;
   appendMsg({ name: name || 'Guest', text: text || '' });
 });
 
@@ -281,20 +271,17 @@ socket.on('groupDisbanded', (reason) => {
 });
 
 /* ========================================================
-=  Drag & Drop + Click to send (multi)
+=  Drag & Drop + Click to send
 ======================================================== */
-let targetForSend = null; // socketId of selected person
-
-function chooseTargetAndPickFiles(targetId, targetName) {
-  // Permission (online)
+let targetForSend = null;
+function chooseTargetAndPickFiles(targetId) {
   if (!MODE_LOCAL && currentRoom) {
-    const iAmHost = isHost;
-    if (!openShare && !iAmHost && targetId !== hostId) {
+    if (!openShare && !isHost && targetId !== hostId) {
       return alert('Host-only sending is enabled. You can only send files to the host.');
     }
   }
   targetForSend = targetId;
-  filePicker.value = ''; // reset
+  filePicker.value = '';
   filePicker.click();
 }
 filePicker.addEventListener('change', () => {
@@ -316,24 +303,29 @@ filePicker.addEventListener('change', () => {
       dropOverlay.classList.remove('show');
       const dt = e.dataTransfer;
       if (dt && dt.files && dt.files.length) {
-        if (!people.length) { alert('Pick a person first (click a card) then drop again.'); return; }
-        if (!targetForSend) { alert('Click a person to target, then drop files.'); return; }
+        if (!targetForSend) { alert('Click a person to target first.'); return; }
         sendFilesTo(targetForSend, Array.from(dt.files));
       }
     } else {
-      // leave
       if (e.target === document || e.target === document.body) dropOverlay.classList.remove('show');
     }
   });
 });
 
 /* ========================================================
-=  File Transfer (Socket.IO relay)
-=  Local: 4MB chunks, Online: 64KB chunks
+=  File Transfer (Ack-based, Safe for GBs)
 ======================================================== */
-const incoming = new Map(); // key = fromId|fileId -> { name, size, mime, parts:[], expected, received }
-
+const incoming = new Map();
 function chunkSize() { return MODE_LOCAL ? 4*MB : 64*KB; }
+
+function emitAck(event, payload) {
+  return new Promise((resolve, reject) => {
+    socket.timeout(10000).emit(event, payload, (err, res) => {
+      if (err) return reject(err);
+      resolve(res);
+    });
+  });
+}
 
 async function sendFilesTo(targetId, files) {
   const room = MODE_LOCAL ? null : (currentRoom || null);
@@ -342,63 +334,51 @@ async function sendFilesTo(targetId, files) {
     const fileId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const cBytes = chunkSize();
 
-    socket.emit('fileMeta', {
-      targetId,
-      room,
-      fileId,
-      name: file.name,
-      size: file.size,
+    await emitAck('fileMeta', {
+      targetId, room, fileId,
+      name: file.name, size: file.size,
       mime: file.type || 'application/octet-stream',
       chunkBytes: cBytes
     });
 
-    // --- Progress UI ---
     const progressElem = document.createElement('div');
     progressElem.className = 'progressItem';
     progressElem.innerHTML = `
       <div><strong>${file.name}</strong> <span class="percent">0%</span> (<span class="speed">0 MB/s</span>)</div>
       <div class="barWrap"><div class="bar"></div></div>
     `;
-    document.body.appendChild(progressElem); 
+    document.body.appendChild(progressElem);
     const bar = progressElem.querySelector('.bar');
     const percentSpan = progressElem.querySelector('.percent');
     const speedSpan = progressElem.querySelector('.speed');
 
-    let offset = 0;
-    let seq = 0;
-    let lastTime = Date.now();
-    let bytesThisSecond = 0;
+    let offset = 0, seq = 0;
+    let lastTime = Date.now(), bytesThisSecond = 0;
 
     while (offset < file.size) {
       const end = Math.min(offset + cBytes, file.size);
       const chunk = await file.slice(offset, end).arrayBuffer();
 
-      socket.emit('fileChunk', { targetId, fileId, seq, chunk });
+      await emitAck('fileChunk', { targetId, fileId, seq, chunk });
 
       offset = end;
       seq++;
       bytesThisSecond += chunk.byteLength;
 
-      // --- Update progress ---
       const percent = ((offset / file.size) * 100).toFixed(1);
       bar.style.width = `${percent}%`;
       percentSpan.textContent = `${percent}%`;
 
-      // Speed calc every second
       const now = Date.now();
       if (now - lastTime >= 1000) {
-        const speedMBs = (bytesThisSecond / (1024 * 1024)).toFixed(2);
+        const speedMBs = (bytesThisSecond / (1024*1024)).toFixed(2);
         speedSpan.textContent = `${speedMBs} MB/s`;
         bytesThisSecond = 0;
         lastTime = now;
       }
-
-      await new Promise(r => setTimeout(r, MODE_LOCAL ? 2 : 0));
     }
 
-    socket.emit('fileComplete', { targetId, fileId });
-
-    // Finalize
+    await emitAck('fileComplete', { targetId, fileId });
     bar.style.width = '100%';
     percentSpan.textContent = '100%';
     speedSpan.textContent = 'Done';
@@ -409,10 +389,8 @@ async function sendFilesTo(targetId, files) {
 socket.on('fileMeta', ({ fromId, fileId, name, size, mime, chunkBytes }) => {
   const key = `${fromId}|${fileId}`;
   incoming.set(key, { name, size, mime: mime || 'application/octet-stream', parts: [], received: 0 });
-  // Optional: show toast
   appendMsg({ name: 'System', text: `Incoming: ${name} (${(size/MB).toFixed(2)} MB)` });
 });
-
 socket.on('fileChunk', ({ fromId, fileId, seq, chunk }) => {
   const key = `${fromId}|${fileId}`;
   const rec = incoming.get(key);
@@ -420,7 +398,6 @@ socket.on('fileChunk', ({ fromId, fileId, seq, chunk }) => {
   rec.parts.push(new Uint8Array(chunk));
   rec.received += (chunk.byteLength || 0);
 });
-
 socket.on('fileComplete', ({ fromId, fileId }) => {
   const key = `${fromId}|${fileId}`;
   const rec = incoming.get(key);
@@ -442,7 +419,7 @@ socket.on('fileComplete', ({ fromId, fileId }) => {
 /* ========================================================
 =  Boot
 ======================================================== */
-modeLabel.textContent = '🌐 Online Mode'; // default
+modeLabel.textContent = '🌐 Online Mode';
 peopleTitle.textContent = 'Members';
 
 window.addEventListener('beforeunload', () => {
