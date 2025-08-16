@@ -4,11 +4,15 @@
   "description": "SendLike — group sharing & chat with local and online modes",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node --max-old-space-size=4096 server.js",
+    "dev": "nodemon server.js --max-old-space-size=4096"
   },
   "dependencies": {
     "express": "^4.18.2",
     "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   },
   "engines": {
     "node": ">=18.0.0"
