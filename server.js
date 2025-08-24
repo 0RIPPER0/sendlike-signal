@@ -5,51 +5,40 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*" }
-});
+const io = new Server(server, { cors: { origin: "*" } });
 
-// serve static files (index.html, script.js, style.css, etc.)
+// serve static files (index.html, script.js, etc.)
 app.use(express.static(__dirname + "/public"));
 
-// --- socket.io signaling ---
-let roster = {}; // socket.id -> {id, name}
+// --- roster state ---
+let localRoom = {}; // socket.id -> {id,name}
 
-// helper to broadcast full roster
 function sendRoster() {
-  io.emit("roster", Object.values(roster));
+  io.emit("localRoster", Object.values(localRoom));
 }
 
 io.on("connection", (socket) => {
   console.log("Peer connected:", socket.id);
 
-  // give placeholder until announce
-  roster[socket.id] = { id: socket.id, name: "Anon" };
-  sendRoster();
-
-  // client announces itself with a random name
-  socket.on("announce", (data) => {
-    roster[socket.id] = { id: socket.id, name: data.name || "Peer" };
+  // client joins local discovery
+  socket.on("enterLocal", (name) => {
+    localRoom[socket.id] = { id: socket.id, name: name || "Peer" };
     sendRoster();
   });
 
-  // forward SDP offers/answers
-  socket.on("offer", ({ to, sdp }) => {
-    io.to(to).emit("offer", { from: socket.id, sdp });
+  socket.on("leaveLocal", () => {
+    delete localRoom[socket.id];
+    sendRoster();
   });
 
-  socket.on("answer", ({ to, sdp }) => {
-    io.to(to).emit("answer", { from: socket.id, sdp });
-  });
-
-  // forward ICE candidates
-  socket.on("ice", ({ to, candidate }) => {
-    io.to(to).emit("ice", { from: socket.id, candidate });
+  // forward generic signaling messages
+  socket.on("signal", ({ target, data }) => {
+    io.to(target).emit("signal", { from: socket.id, data });
   });
 
   socket.on("disconnect", () => {
     console.log("Peer disconnected:", socket.id);
-    delete roster[socket.id];
+    delete localRoom[socket.id];
     sendRoster();
   });
 });
