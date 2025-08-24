@@ -1,13 +1,14 @@
 {
   "name": "sendlike-p2p",
   "version": "1.0.0",
-  "description": "SendLike — Pure P2P file sharing using WebRTC (Socket.IO signaling only)",
+  "description": "SendLike — P2P file share (Socket.IO signaling, WebRTC DataChannel)",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "NODE_ENV=development node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "express": "^4.19.2",
     "socket.io": "^4.7.5"
   },
   "engines": {
