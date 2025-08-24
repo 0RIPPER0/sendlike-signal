@@ -1,18 +1,42 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>P2P File Share</title>
+  <meta charset="utf-8" />
+  <title>SendLike — P2P File Share</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>P2P File Share (Same WiFi)</h1>
-  <p id="me"></p>
+  <main class="wrap">
+    <h1>SendLike — P2P File Share (Local WiFi)</h1>
+    <p class="muted">Signaling only — file bytes go peer-to-peer via WebRTC.</p>
 
-  <h2>Peers</h2>
-  <div id="peers"></div>
+    <section class="me">
+      <div><strong>Your name:</strong> <span id="myName">...</span></div>
+      <div><strong>Your id:</strong> <span id="myId">...</span></div>
+    </section>
 
-  <input type="file" id="fileInput" hidden />
+    <section>
+      <h2>Peers</h2>
+      <div id="peers" class="peers"></div>
+    </section>
+
+    <section>
+      <h2>Transfer</h2>
+      <div class="controls">
+        <input id="fileInput" type="file" multiple hidden>
+        <button id="pickFileBtn">Pick file(s)</button>
+        <select id="peerSelect"><option value="">Select peer</option></select>
+        <button id="connectBtn">Connect / Offer</button>
+        <div id="status" class="status">Idle</div>
+      </div>
+      <div id="transfers" class="transfers"></div>
+    </section>
+
+    <footer class="muted small">
+      Uses WebRTC DataChannel (STUN only by default). If NAT traversal fails you will need a TURN server.
+    </footer>
+  </main>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
