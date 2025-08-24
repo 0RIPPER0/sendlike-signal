@@ -38,40 +38,53 @@
     </footer>
   </main>
 
+  <!-- Socket.io client -->
   <script src="/socket.io/socket.io.js"></script>
+  <!-- SendLike P2P core -->
   <script src="script.js"></script>
+
   <script>
     // --- Bind UI to SL core ---
-    const myNameEl = document.getElementById("myName");
-    const myIdEl = document.getElementById("myId");
-    const peersEl = document.getElementById("peers");
+    const myNameEl   = document.getElementById("myName");
+    const myIdEl     = document.getElementById("myId");
+    const peersEl    = document.getElementById("peers");
     const peerSelect = document.getElementById("peerSelect");
-    const pickFileBtn = document.getElementById("pickFileBtn");
-    const fileInput = document.getElementById("fileInput");
+    const pickFileBtn= document.getElementById("pickFileBtn");
+    const fileInput  = document.getElementById("fileInput");
     const connectBtn = document.getElementById("connectBtn");
-    const statusEl = document.getElementById("status");
-    const transfersEl = document.getElementById("transfers");
+    const statusEl   = document.getElementById("status");
+    const transfersEl= document.getElementById("transfers");
 
-    const { id, name } = SL.init();
+    // Init SendLike core
+    const { name } = SL.init();
     myNameEl.textContent = name;
 
+    // Show ID once connected
+    SL.on("connected", () => {
+      if (SL.state?.myId) {
+        myIdEl.textContent = SL.state.myId.slice(0,6); // show only first 6 chars
+      }
+    });
+
+    // Update peer list
     SL.on("roster", list => {
       peersEl.innerHTML = "";
       peerSelect.innerHTML = "<option value=''>Select peer</option>";
       list.forEach(p => {
         const d = document.createElement("div");
         d.className = "peer";
-        d.textContent = p.name + " — " + p.id.slice(0,6);
+        d.textContent = `${p.name} — ${p.id.slice(0,6)}`;
         d.onclick = () => { peerSelect.value = p.id; };
         peersEl.appendChild(d);
 
         const opt = document.createElement("option");
         opt.value = p.id;
-        opt.textContent = p.name + " (" + p.id.slice(0,6) + ")";
+        opt.textContent = `${p.name} (${p.id.slice(0,6)})`;
         peerSelect.appendChild(opt);
       });
     });
 
+    // Progress + status
     SL.on("send:progress", e => {
       statusEl.textContent = `Sending ${e.name}: ${e.pct.toFixed(1)}% at ${e.rateMbps.toFixed(2)} Mbps`;
     });
@@ -82,6 +95,7 @@
       statusEl.textContent = `Received ${e.meta.name}`;
     });
 
+    // File send
     pickFileBtn.onclick = () => fileInput.click();
     fileInput.onchange = async () => {
       const peerId = peerSelect.value;
@@ -90,6 +104,8 @@
         SL.sendFile(peerId, f).catch(err => console.error(err));
       }
     };
+
+    // Manual connect
     connectBtn.onclick = () => {
       const peerId = peerSelect.value;
       if (!peerId) return alert("Select peer first");
