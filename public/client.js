@@ -1,158 +1,154 @@
-/* public/client.js
-   Auto: join same-WiFi roster with random nickname
-   Pure P2P file transfer via WebRTC DataChannel
-*/
+const socket = io();
 
-(function () {
-  const KB = 1024, MB = KB * KB;
+// random funny name
+const adj = ["Brave","Chill","Zippy","Fuzzy","Witty","Cosmic","Turbo","Sassy","Pixel","Mellow"];
+const ani = ["Panda","Otter","Falcon","Koala","Tiger","Sloth","Fox","Yak","Narwhal","Dolphin"];
+const myName = adj[Math.floor(Math.random()*adj.length)] + ani[Math.floor(Math.random()*ani.length)];
 
-  // ---- random nickname ----
-  function rndName() {
-    const adj = ["Brave","Chill","Turbo","Mellow","Pixel","Zippy","Witty","Cosmic","Sassy","Fuzzy"];
-    const ani = ["Otter","Falcon","Fox","Panda","Moose","Gecko","Yak","Dolphin","Tiger","Koala"];
-    return adj[Math.floor(Math.random()*adj.length)] + ani[Math.floor(Math.random()*ani.length)];
-  }
+document.getElementById("me").textContent = "You are: " + myName;
+socket.emit("join", myName);
 
-  function createEmitter() {
-    const listeners = new Map();
-    return {
-      on(evt, cb) {
-        if (!listeners.has(evt)) listeners.set(evt, new Set());
-        listeners.get(evt).add(cb);
-      },
-      emit(evt, data) {
-        listeners.get(evt)?.forEach(cb => cb(data));
-      }
-    };
-  }
+const peersEl = document.getElementById("peers");
+const fileInput = document.getElementById("fileInput");
 
-  function createP2PClient({ signalingURL, stun = ['stun:stun.l.google.com:19302'] } = {}) {
-    const socket = io(signalingURL || undefined, { transports: ['websocket'] });
-    const appEmitter = createEmitter();
-    const myName = rndName();
+let pc = null, dc = null;
+let targetPeer = null;
 
-    // auto enter local mode on connect
-    socket.on('connect', () => socket.emit('enterLocal', myName));
+// Roster updates
+socket.on("roster", list => {
+  peersEl.innerHTML = "";
+  list.forEach(p => {
+    if (p.id === socket.id) return;
+    const div = document.createElement("div");
+    div.className = "peer";
+    div.textContent = p.name;
+    div.onclick = () => connectTo(p.id, p.name);
+    peersEl.appendChild(div);
+  });
+});
 
-    // roster updates
-    socket.on('localRoster', roster => appEmitter.emit('roster', roster));
+// Signaling
+socket.on("signal", async ({ from, data }) => {
+  if (!pc) await setupPC(from);
 
-    const peers = new Map();
-
-    function createRTCPeer(peerId, isCaller) {
-      const pc = new RTCPeerConnection({ iceServers: [{ urls: stun }] });
-      let dc;
-      const conn = createEmitter();
-
-      if (isCaller) {
-        dc = pc.createDataChannel('data', { ordered: true });
-        setupDC(dc);
-      } else {
-        pc.ondatachannel = (ev) => setupDC(ev.channel);
-      }
-
-      function setupDC(channel) {
-        dc = channel;
-        dc.bufferedAmountLowThreshold = 1 * MB;
-        dc.onopen = () => conn.emit('open');
-        dc.onclose = () => conn.emit('close');
-        dc.onmessage = (ev) => handleMessage(ev.data);
-      }
-
-      // incoming stream state
-      let recv = null;
-      async function handleMessage(data) {
-        if (typeof data === 'string') {
-          const msg = JSON.parse(data);
-          if (msg.type === 'meta') {
-            recv = await createReceiveStream(msg.name, msg.size);
-            conn.emit('recv-meta', msg);
-          } else if (msg.type === 'eof') {
-            await recv.writer.close();
-            conn.emit('recv-complete', { name: recv.name, size: recv.size });
-            recv = null;
-          }
-          return;
-        }
-        if (data instanceof ArrayBuffer) {
-          if (!recv) return;
-          await recv.writer.write(new Uint8Array(data));
-          recv.received += data.byteLength;
-          conn.emit('recv-progress', {
-            received: recv.received, total: recv.size,
-            percent: ((recv.received/recv.size)*100).toFixed(2)
-          });
-        }
-      }
-
-      conn.sendFile = async function(file, { chunkSize = 1*MB } = {}) {
-        dc.send(JSON.stringify({ type: 'meta', name: file.name, size: file.size }));
-        let offset = 0;
-        while (offset < file.size) {
-          const end = Math.min(offset + chunkSize, file.size);
-          const buf = await file.slice(offset, end).arrayBuffer();
-          await waitBuffered(dc, 16*MB, 1*MB);
-          dc.send(buf);
-          offset = end;
-          conn.emit('send-progress', { sent: offset, total: file.size, percent: ((offset/file.size)*100).toFixed(2) });
-        }
-        dc.send(JSON.stringify({ type: 'eof' }));
-        conn.emit('send-complete', { name: file.name, size: file.size });
-      };
-
-      pc.onicecandidate = e => { if (e.candidate) socket.emit('signal-ice', { to: peerId, candidate: e.candidate }); };
-      peers.set(peerId, { pc, conn });
-      return { pc, conn };
-    }
-
-    async function waitBuffered(dc, high, low) {
-      if (dc.bufferedAmount < high) return;
-      await new Promise(res => {
-        const fn = () => { if (dc.bufferedAmount <= low) { dc.removeEventListener('bufferedamountlow', fn); res(); } };
-        dc.addEventListener('bufferedamountlow', fn);
-      });
-    }
-
-    async function createReceiveStream(name, size) {
-      if (window.showSaveFilePicker) {
-        const handle = await showSaveFilePicker({ suggestedName: name });
-        const stream = await handle.createWritable();
-        return { name, size, received: 0, writer: { write: c => stream.write(new Blob([c])), close: () => stream.close() } };
-      }
-      const fileStream = streamSaver.createWriteStream(name, { size });
-      const writer = fileStream.getWriter();
-      return { name, size, received: 0, writer };
-    }
-
-    // signaling
-    socket.on('signal-offer', async ({ from, offer }) => {
-      const { pc, conn } = createRTCPeer(from, false);
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+  if (data.sdp) {
+    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+    if (data.sdp.type === "offer") {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      socket.emit('signal-answer', { to: from, answer });
-    });
-    socket.on('signal-answer', async ({ from, answer }) => {
-      const peer = peers.get(from);
-      if (peer) await peer.pc.setRemoteDescription(new RTCSessionDescription(answer));
-    });
-    socket.on('signal-ice', async ({ from, candidate }) => {
-      const peer = peers.get(from);
-      if (peer) await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
-    });
-
-    return {
-      myName,
-      onRoster: cb => appEmitter.on('roster', cb),
-      connect: async peerId => {
-        const { pc, conn } = createRTCPeer(peerId, true);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit('signal-offer', { to: peerId, offer });
-        return conn;
-      }
-    };
+      socket.emit("signal", { to: from, data: { sdp: pc.localDescription } });
+    }
+  } else if (data.candidate) {
+    try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); }
+    catch (e) { console.error("ICE error", e); }
   }
+});
 
-  window.createP2PClient = createP2PClient;
-})();
+async function connectTo(peerId, peerName) {
+  targetPeer = peerId;
+  await setupPC(peerId);
+
+  dc = pc.createDataChannel("file");
+  setupDC(dc);
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  socket.emit("signal", { to: peerId, data: { sdp: pc.localDescription } });
+
+  // after connected -> file picker
+  dc.onopen = () => fileInput.click();
+}
+
+async function setupPC(peerId) {
+  pc = new RTCPeerConnection();
+  pc.onicecandidate = e => {
+    if (e.candidate) socket.emit("signal", { to: peerId, data: { candidate: e.candidate } });
+  };
+  pc.ondatachannel = e => {
+    dc = e.channel;
+    setupDC(dc);
+  };
+}
+
+function setupDC(channel) {
+  channel.onmessage = e => handleIncoming(e.data);
+  channel.onopen = () => console.log("DataChannel open");
+}
+
+fileInput.addEventListener("change", () => {
+  if (dc && dc.readyState === "open" && fileInput.files.length) {
+    sendFile(fileInput.files[0]);
+  }
+});
+
+// =======================
+// File Sending
+// =======================
+function sendFile(file) {
+  const chunkSize = 64 * 1024;
+  let offset = 0;
+  console.log("Sending", file.name, file.size);
+
+  // send header
+  dc.send(JSON.stringify({ header: true, name: file.name, size: file.size, type: file.type }));
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    dc.send(e.target.result);
+    offset += e.target.result.byteLength;
+    showProgress("Sending", offset, file.size);
+
+    if (offset < file.size) readSlice(offset);
+    else console.log("File sent");
+  };
+
+  function readSlice(o) {
+    const slice = file.slice(offset, o + chunkSize);
+    reader.readAsArrayBuffer(slice);
+  }
+  readSlice(0);
+}
+
+// =======================
+// File Receiving
+// =======================
+let incoming = null, received = 0, buffers = [];
+
+function handleIncoming(data) {
+  if (typeof data === "string") {
+    const meta = JSON.parse(data);
+    if (meta.header) {
+      incoming = meta;
+      received = 0; buffers = [];
+      console.log("Incoming file", incoming);
+      return;
+    }
+  } else {
+    buffers.push(data);
+    received += data.byteLength;
+    showProgress("Receiving", received, incoming.size);
+    if (received >= incoming.size) {
+      const blob = new Blob(buffers, { type: incoming.type });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = incoming.name;
+      a.click();
+      console.log("File received:", incoming.name);
+      incoming = null;
+    }
+  }
+}
+
+// =======================
+// Progress Display
+// =======================
+function showProgress(label, done, total) {
+  let prog = document.querySelector(".progress");
+  if (!prog) {
+    prog = document.createElement("div");
+    prog.className = "progress";
+    document.body.appendChild(prog);
+  }
+  const pct = ((done / total) * 100).toFixed(1);
+  prog.textContent = `${label}: ${pct}% of ${(total/1024/1024).toFixed(1)} MB`;
+}
