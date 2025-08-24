@@ -1,7 +1,0 @@
-{
-  "watch": ["server.js", "public"],
-  "ext": "js json html css",
-  "ignore": ["node_modules", "*.test.js"],
-  "exec": "node --max-old-space-size=4096 server.js",
-  "delay": "500"
-}
