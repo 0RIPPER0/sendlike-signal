@@ -1,157 +1,307 @@
-// public/client.js
-// connect to signaling at the same origin (Railway serves both)
-const socket = io(window.location.origin, {
-  transports: ["websocket"] // prefer WS/WSS on Railway
-});
+/* ==================================================
+   SendLike — P2P client (signaling + WebRTC DataChannel)
+   - Uses Socket.IO for signaling only (SDP & ICE)
+   - DataChannel carries file bytes (no server bandwidth)
+   - Chunked streaming with backpressure control
+   ================================================== */
 
-// random name
-const adj = ["Brave","Chill","Zippy","Fuzzy","Witty","Cosmic","Turbo","Sassy","Pixel","Mellow"];
-const ani = ["Panda","Otter","Falcon","Koala","Tiger","Sloth","Fox","Yak","Narwhal","Dolphin"];
-const myName = adj[Math.floor(Math.random()*adj.length)] + ani[Math.floor(Math.random()*ani.length)];
+// -------- CONFIGURATION --------
+const STUN_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }]; // add TURN if necessary
+const CHUNK_SIZE = 512 * 1024; // 512KB per chunk (changeable)
+const MAX_BUFFERED_AMOUNT = 16 * 1024 * 1024; // 16MB buffered amount threshold
 
-document.getElementById("me").textContent = "You are: " + myName;
-socket.emit("join", myName);
-
+// -------- DOM --------
+const myNameEl = document.getElementById("myName");
+const myIdEl = document.getElementById("myId");
 const peersEl = document.getElementById("peers");
+const peerSelect = document.getElementById("peerSelect");
+const pickFileBtn = document.getElementById("pickFileBtn");
 const fileInput = document.getElementById("fileInput");
+const connectBtn = document.getElementById("connectBtn");
+const statusEl = document.getElementById("status");
+const transfersEl = document.getElementById("transfers");
 
-let pc = null, dc = null;
-let targetPeer = null;
+function logStatus(t){ statusEl.textContent = t; }
 
-// Roster
-socket.on("roster", list => {
+// -------- Signaling (Socket.IO) --------
+const socket = io();
+let mySocketId = null;
+let myRandomName = "Peer" + Math.floor(Math.random()*10000);
+myNameEl.textContent = myRandomName;
+
+socket.on("connect", () => {
+  mySocketId = socket.id;
+  myIdEl.textContent = mySocketId;
+  socket.emit("announce", { name: myRandomName });
+  logStatus("Connected to signaling server");
+});
+
+socket.on("roster", (list) => renderRoster(list));
+
+// offer/answer/ice handlers
+socket.on("offer", async ({ from, sdp }) => {
+  console.log("offer from", from);
+  const pc = createPeerConnection(from, false);
+  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  socket.emit("answer", { to: from, sdp: pc.localDescription });
+});
+
+socket.on("answer", async ({ from, sdp }) => {
+  const pc = pcs.get(from);
+  if (!pc) return;
+  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+});
+
+socket.on("ice", ({ from, candidate }) => {
+  const pc = pcs.get(from);
+  if (!pc) return;
+  pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(e=>console.warn(e));
+});
+
+// -------- Roster UI --------
+let roster = [];
+function renderRoster(list){
+  roster = list.filter(p => p.id !== mySocketId);
   peersEl.innerHTML = "";
-  list.forEach(p => {
-    if (p.id === socket.id) return;
-    const div = document.createElement("div");
-    div.className = "peer";
-    div.textContent = p.name;
-    div.onclick = () => connectTo(p.id, p.name);
-    peersEl.appendChild(div);
+  peerSelect.innerHTML = "<option value=''>Select peer</option>";
+  roster.forEach(p => {
+    const d = document.createElement("div");
+    d.className = "peer";
+    d.textContent = p.name + " — " + p.id.slice(0,6);
+    d.onclick = () => choosePeer(p.id);
+    peersEl.appendChild(d);
+
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name + " (" + p.id.slice(0,6) + ")";
+    peerSelect.appendChild(opt);
   });
-});
+}
 
-// Signaling
-socket.on("signal", async ({ from, data }) => {
-  if (!pc) await setupPC(from);
+function choosePeer(id){
+  peerSelect.value = id;
+  logStatus("Selected " + id);
+}
 
-  if (data.sdp) {
-    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    if (data.sdp.type === "offer") {
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit("signal", { to: from, data: { sdp: pc.localDescription } });
+// -------- WebRTC bookkeeping --------
+const pcs = new Map();   // peerId -> RTCPeerConnection
+const dctrl = new Map(); // peerId -> control channel
+const dfile = new Map(); // peerId -> file channel
+
+function createPeerConnection(peerId, isInitiator){
+  if (pcs.has(peerId)) return pcs.get(peerId);
+  const pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
+  pcs.set(peerId, pc);
+
+  pc.onicecandidate = e => { if (e.candidate) socket.emit("ice", { to: peerId, candidate: e.candidate }); };
+  pc.onconnectionstatechange = () => {
+    console.log("pc state", peerId, pc.connectionState);
+    if (pc.connectionState === "failed" || pc.connectionState === "disconnected" || pc.connectionState === "closed") {
+      cleanupPeer(peerId);
     }
-  } else if (data.candidate) {
-    try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); }
-    catch (e) { console.error("ICE error", e); }
-  }
-});
-
-async function connectTo(peerId, peerName) {
-  targetPeer = peerId;
-  await setupPC(peerId);
-
-  dc = pc.createDataChannel("file", { ordered: true }); // ordered for large files
-  setupDC(dc);
-
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  socket.emit("signal", { to: peerId, data: { sdp: pc.localDescription } });
-
-  dc.onopen = () => fileInput.click();
-}
-
-async function setupPC(peerId) {
-  // ✅ STUN for public candidates (no TURN = zero server bandwidth; may not connect through symmetric NATs)
-  pc = new RTCPeerConnection({
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-  });
-
-  pc.onicecandidate = e => {
-    if (e.candidate) socket.emit("signal", { to: peerId, data: { candidate: e.candidate } });
   };
-  pc.ondatachannel = e => {
-    dc = e.channel;
-    setupDC(dc);
-  };
-}
 
-function setupDC(channel) {
-  channel.binaryType = "arraybuffer";
-  channel.onmessage = e => handleIncoming(e.data);
-  channel.onopen = () => console.log("DataChannel open");
-  channel.onclose = () => console.log("DataChannel closed");
-}
-
-document.getElementById("fileInput").addEventListener("change", () => {
-  if (dc && dc.readyState === "open" && fileInput.files.length) {
-    sendFile(fileInput.files[0]);
+  if (isInitiator){
+    const ctrl = pc.createDataChannel("ctrl");
+    setupControlChannel(peerId, ctrl);
+    const fileCh = pc.createDataChannel("file");
+    setupFileChannel(peerId, fileCh);
+  } else {
+    pc.ondatachannel = (e) => {
+      if (e.channel.label === "ctrl") setupControlChannel(peerId, e.channel);
+      if (e.channel.label === "file") setupFileChannel(peerId, e.channel);
+    };
   }
-});
 
-// -------- File Sending (simple) --------
-function sendFile(file) {
-  const chunkSize = 64 * 1024; // 64KB reliable chunks
+  return pc;
+}
+
+function setupControlChannel(peerId, ch){
+  dctrl.set(peerId, ch);
+  ch.onopen = () => { console.log("ctrl open", peerId); markPeerConnected(peerId); };
+  ch.onmessage = (ev) => {
+    try { const msg = JSON.parse(ev.data); handleControlMessage(peerId, msg); }
+    catch(e){ console.warn("ctrl parse", e); }
+  };
+  ch.onclose = () => { markPeerDisconnected(peerId); };
+}
+
+function setupFileChannel(peerId, ch){
+  dfile.set(peerId, ch);
+  ch.binaryType = "arraybuffer";
+  ch.onopen = () => { console.log("file open", peerId); markPeerConnected(peerId); };
+  ch.onmessage = (ev) => { handleFileMessage(peerId, ev.data); };
+  ch.onclose = () => { markPeerDisconnected(peerId); };
+}
+
+// -------- Control protocol --------
+function handleControlMessage(peerId, msg){
+  if (msg.type === "meta") {
+    createIncoming(peerId, msg.fileId, msg.name, msg.size, msg.mime);
+  } else if (msg.type === "file-complete") {
+    finalizeIncoming(peerId, msg.fileId);
+  }
+}
+
+// -------- Incoming file state --------
+const incoming = {}; // incoming[peerId][fileId] = { name,size,mime,received,parts[] }
+
+function createIncoming(peerId, fileId, name, size, mime){
+  if (!incoming[peerId]) incoming[peerId] = {};
+  incoming[peerId][fileId] = { name, size, mime, received:0, parts:[] };
+  addTransferUI(peerId, fileId, name, size, true);
+}
+
+function handleFileMessage(peerId, data){
+  // Expect binary chunk (ArrayBuffer)
+  const buf = new Uint8Array(data);
+  const map = incoming[peerId];
+  if (!map) return console.warn("no incoming map for", peerId);
+
+  // find first pending file
+  const keys = Object.keys(map);
+  if (!keys.length) return console.warn("no pending incoming file (chunk dropped?)");
+  const fid = keys[0];
+  const rec = map[fid];
+  rec.parts.push(buf);
+  rec.received += buf.byteLength;
+  updateTransferUI(peerId, fid, rec.received, rec.size);
+
+  if (rec.received >= rec.size) finalizeIncoming(peerId, fid);
+}
+
+function finalizeIncoming(peerId, fileId){
+  const rec = incoming[peerId] && incoming[peerId][fileId];
+  if (!rec) return;
+  const blob = new Blob(rec.parts, { type: rec.mime || "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = rec.name || "download";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ a.remove(); URL.revokeObjectURL(url); }, 2000);
+
+  appendLog("Received " + rec.name + " from " + peerId);
+  delete incoming[peerId][fileId];
+  markTransferDone(peerId, fileId);
+}
+
+// -------- Sending file (chunking + backpressure) --------
+async function sendFileToPeer(peerId, file){
+  const ctrl = dctrl.get(peerId);
+  const fileCh = dfile.get(peerId);
+  if (!ctrl || !fileCh || fileCh.readyState !== "open") throw new Error("Channels not ready");
+
+  const fileId = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2,8);
+  ctrl.send(JSON.stringify({ type:"meta", fileId, name:file.name, size:file.size, mime:file.type }));
+
+  addTransferUI(peerId, fileId, file.name, file.size, false);
+
+  // use readable stream if available to avoid allocating huge memory
+  const reader = file.stream && file.stream().getReader ? file.stream().getReader() : null;
   let offset = 0;
-  console.log("Sending", file.name, file.size);
-
-  // header
-  dc.send(JSON.stringify({ header: true, name: file.name, size: file.size, type: file.type }));
-
-  const reader = new FileReader();
-  reader.onload = e => {
-    dc.send(e.target.result);
-    offset += e.target.result.byteLength;
-    showProgress("Sending", offset, file.size);
-
-    if (offset < file.size) readSlice(offset);
-    else console.log("File sent");
-  };
-
-  function readSlice(o) {
-    const slice = file.slice(offset, o + chunkSize);
-    reader.readAsArrayBuffer(slice);
-  }
-  readSlice(0);
-}
-
-// -------- File Receiving --------
-let incoming = null, received = 0, buffers = [];
-
-function handleIncoming(data) {
-  if (typeof data === "string") {
-    const meta = JSON.parse(data);
-    if (meta.header) {
-      incoming = meta;
-      received = 0; buffers = [];
-      console.log("Incoming file", incoming);
-      return;
+  if (reader) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      await sendChunkWithBackpressure(fileCh, value.buffer);
+      offset += value.byteLength;
+      updateTransferUI(peerId, fileId, offset, file.size);
     }
   } else {
-    buffers.push(data);
-    received += data.byteLength;
-    showProgress("Receiving", received, incoming.size);
-    if (received >= incoming.size) {
-      const blob = new Blob(buffers, { type: incoming.type });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = incoming.name;
-      a.click();
-      console.log("File received:", incoming.name);
-      incoming = null;
+    while (offset < file.size) {
+      const end = Math.min(offset + CHUNK_SIZE, file.size);
+      const chunk = await file.slice(offset, end).arrayBuffer();
+      await sendChunkWithBackpressure(fileCh, chunk);
+      offset = end;
+      updateTransferUI(peerId, fileId, offset, file.size);
     }
   }
+
+  ctrl.send(JSON.stringify({ type:"file-complete", fileId }));
+  markTransferDone(peerId, fileId);
+  appendLog("Sent " + file.name + " to " + peerId);
 }
 
-// -------- Progress UI --------
-function showProgress(label, done, total) {
-  let prog = document.querySelector(".progress");
-  if (!prog) {
-    prog = document.createElement("div");
-    prog.className = "progress";
-    document.body.appendChild(prog);
-  }
-  const pct = ((done / total) * 100).toFixed(1);
-  prog.textContent = `${label}: ${pct}% of ${(total/1024/1024).toFixed(1)} MB`;
+function sendChunkWithBackpressure(ch, arrayBuffer){
+  return new Promise((resolve, reject) => {
+    function trySend(){
+      if (ch.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+        setTimeout(trySend, 50);
+        return;
+      }
+      try { ch.send(arrayBuffer); resolve(); } catch(e){ reject(e); }
+    }
+    trySend();
+  });
 }
+
+// -------- UI helpers for transfers --------
+function addTransferUI(peerId, fileId, name, size, incomingFlag){
+  const el = document.createElement("div");
+  el.className = "transfer";
+  el.id = `tr-${peerId}-${fileId}`;
+  el.innerHTML = `<div><strong>${incomingFlag ? "Receiving" : "Sending"}:</strong> ${name} <span class="small" id="sz-${peerId}-${fileId}">(${(size/1024/1024).toFixed(2)} MB)</span></div>
+    <div class="bar"><i style="width:0%"></i></div>`;
+  transfersEl.appendChild(el);
+}
+function updateTransferUI(peerId, fileId, doneBytes, total){
+  const el = document.getElementById(`tr-${peerId}-${fileId}`);
+  if (!el) return;
+  const pct = Math.min(100, (doneBytes/total*100)).toFixed(1);
+  el.querySelector(".bar > i").style.width = pct + "%";
+  const sz = el.querySelector(`#sz-${peerId}-${fileId}`);
+  if (sz) sz.textContent = `(${(total/1024/1024).toFixed(2)} MB) ${pct}%`;
+}
+function markTransferDone(peerId, fileId){
+  const el = document.getElementById(`tr-${peerId}-${fileId}`);
+  if (!el) return;
+  el.querySelector(".bar > i").style.width = "100%";
+  el.style.opacity = "0.7";
+  // auto-hide after a while:
+  setTimeout(()=> el.remove(), 30_000);
+}
+
+// -------- connection bookkeeping UI --------
+function markPeerConnected(peerId){
+  [...peersEl.children].forEach(div=>{
+    if (div.textContent.includes(peerId.slice(0,6))) div.classList.add("connected");
+  });
+}
+function markPeerDisconnected(peerId){
+  [...peersEl.children].forEach(div=>{
+    if (div.textContent.includes(peerId.slice(0,6))) div.classList.remove("connected");
+  });
+}
+function cleanupPeer(peerId){
+  const pc = pcs.get(peerId);
+  if (pc) try{ pc.close(); }catch(e){}
+  pcs.delete(peerId); dctrl.delete(peerId); dfile.delete(peerId);
+  markPeerDisconnected(peerId);
+}
+
+// -------- utilities --------
+function appendLog(msg){ console.log(msg); logStatus(msg); }
+
+// -------- UI event handlers --------
+pickFileBtn.addEventListener("click", ()=> fileInput.click());
+fileInput.addEventListener("change", async (e)=>{
+  const files = Array.from(e.target.files || []);
+  const peerId = peerSelect.value;
+  if (!peerId) return alert("Select peer first");
+  for (const f of files) {
+    try { await sendFileToPeer(peerId, f); } catch (err) { console.error("send err", err); appendLog("Error sending: "+err.message); }
+  }
+});
+
+connectBtn.addEventListener("click", async ()=>{
+  const target = peerSelect.value;
+  if (!target) return alert("Select peer first");
+  logStatus("Creating offer to " + target);
+  const pc = createPeerConnection(target, true);
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  socket.emit("offer", { to: target, sdp: pc.localDescription });
+});
