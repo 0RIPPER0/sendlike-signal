@@ -1,6 +1,10 @@
-const socket = io();
+// public/client.js
+// connect to signaling at the same origin (Railway serves both)
+const socket = io(window.location.origin, {
+  transports: ["websocket"] // prefer WS/WSS on Railway
+});
 
-// random funny name
+// random name
 const adj = ["Brave","Chill","Zippy","Fuzzy","Witty","Cosmic","Turbo","Sassy","Pixel","Mellow"];
 const ani = ["Panda","Otter","Falcon","Koala","Tiger","Sloth","Fox","Yak","Narwhal","Dolphin"];
 const myName = adj[Math.floor(Math.random()*adj.length)] + ani[Math.floor(Math.random()*ani.length)];
@@ -14,7 +18,7 @@ const fileInput = document.getElementById("fileInput");
 let pc = null, dc = null;
 let targetPeer = null;
 
-// Roster updates
+// Roster
 socket.on("roster", list => {
   peersEl.innerHTML = "";
   list.forEach(p => {
@@ -48,19 +52,22 @@ async function connectTo(peerId, peerName) {
   targetPeer = peerId;
   await setupPC(peerId);
 
-  dc = pc.createDataChannel("file");
+  dc = pc.createDataChannel("file", { ordered: true }); // ordered for large files
   setupDC(dc);
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   socket.emit("signal", { to: peerId, data: { sdp: pc.localDescription } });
 
-  // after connected -> file picker
   dc.onopen = () => fileInput.click();
 }
 
 async function setupPC(peerId) {
-  pc = new RTCPeerConnection();
+  // ✅ STUN for public candidates (no TURN = zero server bandwidth; may not connect through symmetric NATs)
+  pc = new RTCPeerConnection({
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+  });
+
   pc.onicecandidate = e => {
     if (e.candidate) socket.emit("signal", { to: peerId, data: { candidate: e.candidate } });
   };
@@ -71,25 +78,25 @@ async function setupPC(peerId) {
 }
 
 function setupDC(channel) {
+  channel.binaryType = "arraybuffer";
   channel.onmessage = e => handleIncoming(e.data);
   channel.onopen = () => console.log("DataChannel open");
+  channel.onclose = () => console.log("DataChannel closed");
 }
 
-fileInput.addEventListener("change", () => {
+document.getElementById("fileInput").addEventListener("change", () => {
   if (dc && dc.readyState === "open" && fileInput.files.length) {
     sendFile(fileInput.files[0]);
   }
 });
 
-// =======================
-// File Sending
-// =======================
+// -------- File Sending (simple) --------
 function sendFile(file) {
-  const chunkSize = 64 * 1024;
+  const chunkSize = 64 * 1024; // 64KB reliable chunks
   let offset = 0;
   console.log("Sending", file.name, file.size);
 
-  // send header
+  // header
   dc.send(JSON.stringify({ header: true, name: file.name, size: file.size, type: file.type }));
 
   const reader = new FileReader();
@@ -109,9 +116,7 @@ function sendFile(file) {
   readSlice(0);
 }
 
-// =======================
-// File Receiving
-// =======================
+// -------- File Receiving --------
 let incoming = null, received = 0, buffers = [];
 
 function handleIncoming(data) {
@@ -139,9 +144,7 @@ function handleIncoming(data) {
   }
 }
 
-// =======================
-// Progress Display
-// =======================
+// -------- Progress UI --------
 function showProgress(label, done, total) {
   let prog = document.querySelector(".progress");
   if (!prog) {
