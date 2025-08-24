@@ -238,30 +238,67 @@ function sendChunkWithBackpressure(ch, arrayBuffer){
   });
 }
 
-// -------- UI helpers for transfers --------
+// -------- UI helpers for transfers (with speed + ETA) --------
 function addTransferUI(peerId, fileId, name, size, incomingFlag){
   const el = document.createElement("div");
   el.className = "transfer";
   el.id = `tr-${peerId}-${fileId}`;
-  el.innerHTML = `<div><strong>${incomingFlag ? "Receiving" : "Sending"}:</strong> ${name} <span class="small" id="sz-${peerId}-${fileId}">(${(size/1024/1024).toFixed(2)} MB)</span></div>
-    <div class="bar"><i style="width:0%"></i></div>`;
+  el.dataset.startTime = Date.now();
+  el.dataset.lastBytes = 0;
+  el.innerHTML = `
+    <div>
+      <strong>${incomingFlag ? "Receiving" : "Sending"}:</strong> ${name} 
+      <span class="small" id="sz-${peerId}-${fileId}">
+        (0 / ${(size/1024/1024).toFixed(2)} MB — 0%)
+      </span>
+    </div>
+    <div class="bar"><i style="width:0%"></i></div>
+    <div class="speed small" id="sp-${peerId}-${fileId}">
+      Speed: 0 MB/s | ETA: —
+    </div>
+  `;
   transfersEl.appendChild(el);
 }
+
 function updateTransferUI(peerId, fileId, doneBytes, total){
   const el = document.getElementById(`tr-${peerId}-${fileId}`);
   if (!el) return;
+
   const pct = Math.min(100, (doneBytes/total*100)).toFixed(1);
   el.querySelector(".bar > i").style.width = pct + "%";
+
   const sz = el.querySelector(`#sz-${peerId}-${fileId}`);
-  if (sz) sz.textContent = `(${(total/1024/1024).toFixed(2)} MB) ${pct}%`;
+  if (sz) sz.textContent = `(${(doneBytes/1024/1024).toFixed(2)} MB / ${(total/1024/1024).toFixed(2)} MB — ${pct}%)`;
+
+  // --- Speed + ETA ---
+  const startTime = parseInt(el.dataset.startTime,10);
+  const elapsed = (Date.now() - startTime) / 1000; // seconds
+  const speed = doneBytes / elapsed; // bytes per sec
+  const eta = speed > 0 ? (total - doneBytes) / speed : 0;
+
+  const speedEl = el.querySelector(`#sp-${peerId}-${fileId}`);
+  if (speedEl) {
+    speedEl.textContent = `Speed: ${(speed/1024/1024).toFixed(2)} MB/s | ETA: ${formatTime(eta)}`;
+  }
 }
+
 function markTransferDone(peerId, fileId){
   const el = document.getElementById(`tr-${peerId}-${fileId}`);
   if (!el) return;
   el.querySelector(".bar > i").style.width = "100%";
+  const sp = el.querySelector(`#sp-${peerId}-${fileId}`);
+  if (sp) sp.textContent = "✅ Completed";
   el.style.opacity = "0.7";
   // auto-hide after a while:
-  setTimeout(()=> el.remove(), 30_000);
+  setTimeout(()=> el.remove(), 20_000);
+}
+
+// -------- Utility formatter --------
+function formatTime(seconds) {
+  if (seconds < 1) return "0s";
+  if (seconds < 60) return `${seconds.toFixed(0)}s`;
+  if (seconds < 3600) return `${(seconds/60).toFixed(1)} min`;
+  return `${(seconds/3600).toFixed(1)} hr`;
 }
 
 // -------- connection bookkeeping UI --------
