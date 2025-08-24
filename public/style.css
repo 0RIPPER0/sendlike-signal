@@ -1,14 +1,16 @@
-body { font-family: sans-serif; padding: 1em; }
-#peers { display: flex; flex-wrap: wrap; gap: 1em; }
-.peer {
-  padding: 10px 15px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.peer:hover { background: #f0f0f0; }
-.progress {
-  font-size: 0.9em;
-  color: #333;
-  margin-top: 4px;
-}
+:root{--bg:#f6f7fb;--card:#fff;--accent:#6b4dd6;--muted:#666}
+*{box-sizing:border-box}
+body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);padding:18px;color:#121212}
+.wrap{max-width:880px;margin:0 auto;background:var(--card);padding:20px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.06)}
+h1{margin:0 0 6px;font-size:20px}
+.muted{color:var(--muted)}
+.peers{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.peer{padding:10px 12px;border-radius:10px;border:1px solid #e6e6ef;cursor:pointer;background:#fff}
+.peer.connected{border-color:var(--accent);box-shadow:0 6px 18px rgba(107,77,214,0.08)}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.status{margin-left:8px;color:var(--muted)}
+.transfers{margin-top:12px}
+.transfer{padding:8px;border:1px solid #eee;border-radius:8px;margin-bottom:8px;background:#fafafa}
+.bar{height:10px;background:#e6e6ef;border-radius:6px;overflow:hidden;margin-top:6px}
+.bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#8a6bf7);width:0%}
+.small{font-size:12px}
