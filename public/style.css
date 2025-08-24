@@ -1,16 +1,46 @@
-:root{--bg:#f6f7fb;--card:#fff;--accent:#6b4dd6;--muted:#666}
-*{box-sizing:border-box}
-body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);padding:18px;color:#121212}
-.wrap{max-width:880px;margin:0 auto;background:var(--card);padding:20px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.06)}
-h1{margin:0 0 6px;font-size:20px}
-.muted{color:var(--muted)}
-.peers{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
-.peer{padding:10px 12px;border-radius:10px;border:1px solid #e6e6ef;cursor:pointer;background:#fff}
-.peer.connected{border-color:var(--accent);box-shadow:0 6px 18px rgba(107,77,214,0.08)}
-.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
-.status{margin-left:8px;color:var(--muted)}
-.transfers{margin-top:12px}
-.transfer{padding:8px;border:1px solid #eee;border-radius:8px;margin-bottom:8px;background:#fafafa}
-.bar{height:10px;background:#e6e6ef;border-radius:6px;overflow:hidden;margin-top:6px}
-.bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#8a6bf7);width:0%}
-.small{font-size:12px}
+:root {
+  --fg: #111;
+  --muted: #666;
+  --bg: #fff;
+  --border: #ddd;
+  --accent: #2e7dff;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: var(--fg); background: var(--bg); }
+
+.wrap { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+h1 { margin: 0 0 6px; font-size: 24px; }
+h2 { font-size: 18px; margin: 18px 0 8px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+
+.me { padding: 12px; border: 1px solid var(--border); border-radius: 10px; margin: 12px 0; display: grid; gap: 8px; }
+
+.peers { display: flex; flex-wrap: wrap; gap: 8px; }
+.peer {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.peer:hover { background: #f6f8ff; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button {
+  border: 1px solid var(--border);
+  background: #f7f7f7;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+
+.status { margin-left: auto; color: var(--muted); }
+
+.transfers { margin-top: 12px; display: grid; gap: 8px; }
+.transfer { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+.transfer .bar { height: 8px; background:#f0f0f0; border-radius: 999px; overflow: hidden; margin-top: 6px; }
+.transfer .bar i { display:block; height: 100%; width: 0%; background: var(--accent); }
