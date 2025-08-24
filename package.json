@@ -1,6 +1,7 @@
 {
-  "name": "sendlike-p2p-signaling",
+  "name": "sendlike-signaling",
   "version": "1.0.0",
+  "description": "SendLike signaling server (Socket.IO) - only SDP/ICE/roster",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
