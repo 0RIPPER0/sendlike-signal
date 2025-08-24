@@ -1,5 +1,7 @@
+// server.js — Socket.IO signaling + simple LAN roster (zero file relaying)
 const express = require("express");
 const http = require("http");
+const path = require("path");
 const { Server } = require("socket.io");
 
 const app = express();
@@ -8,34 +10,56 @@ const io = new Server(server, {
   cors: { origin: "*" }
 });
 
-// serve static files (index.html, script.js, style.css, etc.)
-app.use(express.static(__dirname + "/public"));
+// Serve static assets
+const PUBLIC_DIR = path.join(__dirname, "public");
+app.use(express.static(PUBLIC_DIR));
 
-let roster = {}; // socket.id -> {id, name}
+// Health
+app.get("/health", (_, res) => res.status(200).send("ok"));
+
+// -------- Local discovery roster --------
+// Each connected socket can "enterLocal(name)" to join the local lobby.
+// We keep a simple in-memory map and broadcast the roster to the "local" room.
+const localPeers = new Map(); // socketId -> { id, name }
+
+function pushLocalRoster() {
+  const roster = Array.from(localPeers.values());
+  io.to("local").emit("localRoster", roster);
+}
 
 io.on("connection", (socket) => {
-  console.log("Peer connected:", socket.id);
+  console.log("[io] connected", socket.id);
 
-  // announce peer
-  socket.on("announce", (data) => {
-    roster[socket.id] = { id: socket.id, name: data.name || "Peer" };
-    io.emit("roster", Object.values(roster));
+  socket.on("enterLocal", (name) => {
+    localPeers.set(socket.id, { id: socket.id, name: (name || "Peer") });
+    socket.join("local");
+    pushLocalRoster();
   });
 
-  // unified signaling channel
+  socket.on("leaveLocal", () => {
+    socket.leave("local");
+    localPeers.delete(socket.id);
+    pushLocalRoster();
+  });
+
+  // -------- Unified signaling channel --------
+  // Client emits: socket.emit("signal", { target, data }) where data is { sdp } or { candidate }
   socket.on("signal", ({ target, data }) => {
+    if (!target || !data) return;
     io.to(target).emit("signal", { from: socket.id, data });
   });
 
-  // cleanup
   socket.on("disconnect", () => {
-    console.log("Peer disconnected:", socket.id);
-    delete roster[socket.id];
-    io.emit("roster", Object.values(roster));
+    // Cleanup from local roster
+    if (localPeers.has(socket.id)) {
+      localPeers.delete(socket.id);
+      pushLocalRoster();
+    }
+    console.log("[io] disconnected", socket.id);
   });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log("Signaling server running on port", PORT);
+  console.log(`[sendlike] signaling server on :${PORT}`);
 });
