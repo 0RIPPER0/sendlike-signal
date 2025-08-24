@@ -1,87 +1,46 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SendLike</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-</head>
-<body>
-  <div id="landing">
-    <div class="plane"></div>
-    <div class="contrail"></div>
-  </div>
-
-  <main id="app" hidden>
-    <header class="topbar">
-      <div class="brand">SendLike</div>
-      <div class="controls">
-        <label class="switch">
-          <input id="modeSwitch" type="checkbox">
-          <span class="slider"></span>
-        </label>
-        <span id="modeLabel">🌐 Online Mode</span>
-        <button id="aboutBtn">About</button>
-      </div>
-    </header>
-
-    <section class="cards">
-      <div id="cardOnlineCreate" class="card">
-        <h3>Create Group</h3>
-        <input id="nameHost" placeholder="Your name" />
-        <button id="createBtn">Create</button>
-      </div>
-
-      <div id="cardOnlineJoin" class="card">
-        <h3>Join Group</h3>
-        <input id="nameOnline" placeholder="Your name" />
-        <input id="joinCode" placeholder="6-digit code" maxlength="6" />
-        <button id="joinBtn">Join</button>
-      </div>
-
-      <div id="sessionInfo" class="card" hidden>
-        <h3>Session</h3>
-        <div>Code: <b id="sessionCode">———</b></div>
-        <div>Role: <b id="sessionRole">—</b></div>
-        <div>Status: <b id="sessionStatus">Active</b></div>
-        <div id="openShareWrap" hidden class="inline">
-          <label class="switch">
-            <input id="openShareSwitch" type="checkbox">
-            <span class="slider"></span>
-          </label>
-          <span id="openShareLabel">🔒 Host-only sending</span>
-        </div>
-        <button id="disbandBtn" hidden>Disband</button>
-      </div>
-    </section>
-
-    <section class="people">
-      <h3 id="peopleTitle">Members</h3>
-      <div id="peopleList" class="peopleList"></div>
-    </section>
-
-    <input id="fileInput" type="file" multiple hidden />
-
-    <div id="dropOverlay"><div>Drop files to send</div></div>
-
-    <!-- Chat -->
-    <button id="chatToggleBtn" class="chatFab">💬</button>
-    <span id="chatNotifDot" class="dot"></span>
-    <div id="chatBox" class="chatBox" hidden>
-      <div class="chatHeader">
-        <div>Chat</div>
-        <button id="chatCloseBtn">✕</button>
-      </div>
-      <div id="chatMessages" class="chatMessages"></div>
-      <div class="chatInputRow">
-        <input id="chatInput" placeholder="Type a message…" />
-        <button id="sendChatBtn">Send</button>
-      </div>
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>P2P Test</title></head>
+  <body>
+    <input id="name" placeholder="Your name" />
+    <button id="enter">Enter Local</button>
+    <div>
+      <ul id="roster"></ul>
     </div>
-  </main>
+    <input id="file" type="file" />
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com/streamsaver@2.0.6/StreamSaver.min.js"></script>
+    <script src="client.js"></script>
+    <script>
+      const p2p = createP2PClient({ signalingURL: location.origin });
+      const rosterEl = document.getElementById('roster');
 
-  <script src="script.js"></script>
-</body>
+      p2p.onRoster(list => {
+        rosterEl.innerHTML = '';
+        list.forEach(peer => {
+          const li = document.createElement('li');
+          li.textContent = peer.name + ' (' + peer.id + ') ';
+          const btn = document.createElement('button');
+          btn.textContent = 'Connect';
+          btn.onclick = async () => {
+            const conn = await p2p.connect(peer.id);
+            conn.on('open', () => console.log('DC open'));
+            conn.on('send-progress', p => console.log('send', p.percent + '%'));
+            conn.on('recv-progress', p => console.log('recv', p.percent + '%'));
+
+            document.getElementById('file').onchange = async (e) => {
+              const f = e.target.files[0];
+              await conn.sendFile(f, { chunkSize: 1024 * 1024 }); // 1MB chunks
+            };
+          };
+          li.appendChild(btn);
+          rosterEl.appendChild(li);
+        });
+      });
+
+      document.getElementById('enter').onclick = () => {
+        p2p.enterLocal(document.getElementById('name').value || 'Guest');
+      };
+    </script>
+  </body>
 </html>
