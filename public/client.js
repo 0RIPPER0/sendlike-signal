@@ -1,28 +1,17 @@
 /* public/client.js
-   Minimal no-UI P2P file transfer via WebRTC.
-   Requires:
-     <script src="/socket.io/socket.io.js"></script>
-     <script src="https://unpkg.com/streamsaver@2.0.6/StreamSaver.min.js"></script>
-   Then load this file.
-
-   Usage example (in your page/app code):
-     const p2p = createP2PClient({ signalingURL: location.origin, stun: ['stun:stun.l.google.com:19302'] });
-
-     p2p.onRoster(roster => console.log('Roster:', roster));
-     p2p.enterLocal('Alice');
-
-     // Connect to a peerId you see in roster:
-     const conn = await p2p.connect(peerId);
-     // Send a File object (from <input type="file">):
-     await conn.sendFile(file, { chunkSize: 1 * 1024 * 1024 });
-
-     // Receive automatically prompts save; subscribe to progress:
-     conn.on('recv-progress', p => console.log('recv %', p.percent));
-     conn.on('send-progress', p => console.log('send %', p.percent));
+   Auto: join same-WiFi roster with random nickname
+   Pure P2P file transfer via WebRTC DataChannel
 */
 
 (function () {
   const KB = 1024, MB = KB * KB;
+
+  // ---- random nickname ----
+  function rndName() {
+    const adj = ["Brave","Chill","Turbo","Mellow","Pixel","Zippy","Witty","Cosmic","Sassy","Fuzzy"];
+    const ani = ["Otter","Falcon","Fox","Panda","Moose","Gecko","Yak","Dolphin","Tiger","Koala"];
+    return adj[Math.floor(Math.random()*adj.length)] + ani[Math.floor(Math.random()*ani.length)];
+  }
 
   function createEmitter() {
     const listeners = new Map();
@@ -30,9 +19,6 @@
       on(evt, cb) {
         if (!listeners.has(evt)) listeners.set(evt, new Set());
         listeners.get(evt).add(cb);
-      },
-      off(evt, cb) {
-        listeners.get(evt)?.delete(cb);
       },
       emit(evt, data) {
         listeners.get(evt)?.forEach(cb => cb(data));
@@ -43,238 +29,130 @@
   function createP2PClient({ signalingURL, stun = ['stun:stun.l.google.com:19302'] } = {}) {
     const socket = io(signalingURL || undefined, { transports: ['websocket'] });
     const appEmitter = createEmitter();
-    let myName = 'Guest';
+    const myName = rndName();
 
-    // Roster
+    // auto enter local mode on connect
+    socket.on('connect', () => socket.emit('enterLocal', myName));
+
+    // roster updates
     socket.on('localRoster', roster => appEmitter.emit('roster', roster));
 
-    // Map of peerId -> PeerConnection wrapper
     const peers = new Map();
 
-    function onRoster(cb) { appEmitter.on('roster', cb); }
-
-    function enterLocal(name = 'Guest') { myName = name; socket.emit('enterLocal', name); }
-    function leaveLocal() { socket.emit('leaveLocal'); }
-
-    // --- WebRTC helpers ---
-    function createRTCPeer(peerId, isCaller, opts = {}) {
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: stun }],
-      });
-
-      // DataChannel (caller creates)
-      let dc = null;
+    function createRTCPeer(peerId, isCaller) {
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: stun }] });
+      let dc;
       const conn = createEmitter();
-      conn.peerId = peerId;
-
-      const cleanup = () => {
-        dc?.close();
-        pc.close();
-        peers.delete(peerId);
-      };
-      conn.close = cleanup;
-
-      // Backpressure thresholds
-      const DEFAULT_CHUNK = opts.chunkSize || 1 * MB;
-      const BUFFER_LOW = 1 * MB;
-      const BUFFER_HIGH = 16 * MB;
-
-      function setupDC(channel) {
-        dc = channel;
-        // lower threshold so 'bufferedamountlow' fires when below this
-        dc.bufferedAmountLowThreshold = BUFFER_LOW;
-
-        dc.onopen = () => conn.emit('open');
-        dc.onclose = () => { conn.emit('close'); cleanup(); };
-        dc.onerror = (e) => conn.emit('error', e);
-
-        // Receiver: streaming to disk
-        let recvState = null; // { name, size, received, writer, stream }
-        dc.onmessage = async (ev) => {
-          // First message is JSON meta; then ArrayBuffer chunks; final "EOF"
-          if (typeof ev.data === 'string') {
-            const msg = JSON.parse(ev.data);
-            if (msg.type === 'meta') {
-              // Prepare a stream writer
-              recvState = await createReceiveStream(msg.name, msg.size);
-              conn.emit('recv-meta', msg);
-            } else if (msg.type === 'eof') {
-              // finalize
-              await recvState?.writer?.close();
-              conn.emit('recv-complete', { name: recvState?.name, size: recvState?.size });
-              recvState = null;
-            }
-            return;
-          }
-
-          // Binary chunk
-          if (ev.data instanceof ArrayBuffer || ev.data instanceof Blob) {
-            const chunk = ev.data instanceof Blob ? await ev.data.arrayBuffer() : ev.data;
-            if (!recvState) return; // ignore
-            await recvState.writer.ready; // backpressure on WritableStream
-            await recvState.writer.write(new Uint8Array(chunk));
-            recvState.received += chunk.byteLength;
-            const percent = recvState.size ? +((recvState.received / recvState.size) * 100).toFixed(2) : 0;
-            conn.emit('recv-progress', {
-              received: recvState.received,
-              total: recvState.size,
-              percent
-            });
-          }
-        };
-      }
 
       if (isCaller) {
-        setupDC(pc.createDataChannel('data', { ordered: true }));
+        dc = pc.createDataChannel('data', { ordered: true });
+        setupDC(dc);
       } else {
         pc.ondatachannel = (ev) => setupDC(ev.channel);
       }
 
-      // ICE
-      pc.onicecandidate = (e) => {
-        if (e.candidate) socket.emit('signal-ice', { to: peerId, candidate: e.candidate });
-      };
+      function setupDC(channel) {
+        dc = channel;
+        dc.bufferedAmountLowThreshold = 1 * MB;
+        dc.onopen = () => conn.emit('open');
+        dc.onclose = () => conn.emit('close');
+        dc.onmessage = (ev) => handleMessage(ev.data);
+      }
 
-      // --- Public sendFile API (chunked + backpressure) ---
-      conn.sendFile = async function sendFile(file, { chunkSize = DEFAULT_CHUNK } = {}) {
-        if (!dc || dc.readyState !== 'open') throw new Error('DataChannel not open');
+      // incoming stream state
+      let recv = null;
+      async function handleMessage(data) {
+        if (typeof data === 'string') {
+          const msg = JSON.parse(data);
+          if (msg.type === 'meta') {
+            recv = await createReceiveStream(msg.name, msg.size);
+            conn.emit('recv-meta', msg);
+          } else if (msg.type === 'eof') {
+            await recv.writer.close();
+            conn.emit('recv-complete', { name: recv.name, size: recv.size });
+            recv = null;
+          }
+          return;
+        }
+        if (data instanceof ArrayBuffer) {
+          if (!recv) return;
+          await recv.writer.write(new Uint8Array(data));
+          recv.received += data.byteLength;
+          conn.emit('recv-progress', {
+            received: recv.received, total: recv.size,
+            percent: ((recv.received/recv.size)*100).toFixed(2)
+          });
+        }
+      }
 
-        // Send meta first
+      conn.sendFile = async function(file, { chunkSize = 1*MB } = {}) {
         dc.send(JSON.stringify({ type: 'meta', name: file.name, size: file.size }));
-
-        // Read & send in chunks, respecting backpressure
         let offset = 0;
-        let lastT = Date.now(), bytesThisSecond = 0;
-
         while (offset < file.size) {
           const end = Math.min(offset + chunkSize, file.size);
-          const blob = file.slice(offset, end);
-          const buf = await blob.arrayBuffer();
-
-          // Backpressure: pause when bufferedAmount is high
-          await waitBuffered(dc, BUFFER_HIGH, BUFFER_LOW);
-
+          const buf = await file.slice(offset, end).arrayBuffer();
+          await waitBuffered(dc, 16*MB, 1*MB);
           dc.send(buf);
-
           offset = end;
-          bytesThisSecond += buf.byteLength;
-
-          const percent = +((offset / file.size) * 100).toFixed(2);
-          const now = Date.now();
-          if (now - lastT >= 1000) {
-            const mbps = (bytesThisSecond / (1024 * 1024)).toFixed(2);
-            conn.emit('send-speed', { MBps: mbps });
-            bytesThisSecond = 0;
-            lastT = now;
-          }
-          conn.emit('send-progress', { sent: offset, total: file.size, percent });
+          conn.emit('send-progress', { sent: offset, total: file.size, percent: ((offset/file.size)*100).toFixed(2) });
         }
-
-        // EOF
         dc.send(JSON.stringify({ type: 'eof' }));
         conn.emit('send-complete', { name: file.name, size: file.size });
       };
 
-      peers.set(peerId, { pc, dcRef: () => dc, conn });
-
-      return { pc, conn, dcRef: () => dc };
+      pc.onicecandidate = e => { if (e.candidate) socket.emit('signal-ice', { to: peerId, candidate: e.candidate }); };
+      peers.set(peerId, { pc, conn });
+      return { pc, conn };
     }
 
     async function waitBuffered(dc, high, low) {
-      if (dc.bufferedAmount < high) return; // safe
-      await new Promise((resolve) => {
-        function onLow() {
-          if (dc.bufferedAmount <= low) {
-            dc.removeEventListener('bufferedamountlow', onLow);
-            resolve();
-          }
-        }
-        dc.addEventListener('bufferedamountlow', onLow);
+      if (dc.bufferedAmount < high) return;
+      await new Promise(res => {
+        const fn = () => { if (dc.bufferedAmount <= low) { dc.removeEventListener('bufferedamountlow', fn); res(); } };
+        dc.addEventListener('bufferedamountlow', fn);
       });
     }
 
-    // Receiver: pick StreamSaver or FS Access stream
-    async function createReceiveStream(filename, size) {
-      // Try FS Access (Chrome/Edge)
+    async function createReceiveStream(name, size) {
       if (window.showSaveFilePicker) {
-        try {
-          const handle = await showSaveFilePicker({
-            suggestedName: filename,
-            types: [{ description: 'All Files', accept: { '*/*': ['.*'] } }],
-          });
-          const stream = await handle.createWritable({ keepExistingData: false });
-          // Wrap to match StreamSaver writer interface
-          return {
-            name: filename,
-            size,
-            received: 0,
-            writer: {
-              ready: Promise.resolve(),
-              write: (chunk) => stream.write(new Blob([chunk])),
-              close: () => stream.close()
-            }
-          };
-        } catch (e) { /* fall through to StreamSaver */ }
+        const handle = await showSaveFilePicker({ suggestedName: name });
+        const stream = await handle.createWritable();
+        return { name, size, received: 0, writer: { write: c => stream.write(new Blob([c])), close: () => stream.close() } };
       }
-
-      // StreamSaver (works with service worker)
-      // IMPORTANT: set .mitm to a page under same origin or use default
-      if (!window.streamSaver) throw new Error("StreamSaver not loaded. Include StreamSaver.min.js");
-      // optional: streamSaver.mitm = '/streamsaver/mitm.html'; // host this file if needed
-      const fileStream = window.streamSaver.createWriteStream(filename, { size });
+      const fileStream = streamSaver.createWriteStream(name, { size });
       const writer = fileStream.getWriter();
-      return {
-        name: filename,
-        size,
-        received: 0,
-        writer: {
-          ready: Promise.resolve(),
-          write: (chunk) => writer.write(chunk),
-          close: () => writer.close()
-        }
-      };
+      return { name, size, received: 0, writer };
     }
 
-    // --- Signaling glue ---
-    socket.on('signal-offer', async ({ from, offer, fromName }) => {
+    // signaling
+    socket.on('signal-offer', async ({ from, offer }) => {
       const { pc, conn } = createRTCPeer(from, false);
-      const desc = new RTCSessionDescription(offer);
-      await pc.setRemoteDescription(desc);
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('signal-answer', { to: from, answer });
-      conn.emit('peer-info', { fromName });
     });
-
     socket.on('signal-answer', async ({ from, answer }) => {
       const peer = peers.get(from);
-      if (!peer) return;
-      await peer.pc.setRemoteDescription(new RTCSessionDescription(answer));
+      if (peer) await peer.pc.setRemoteDescription(new RTCSessionDescription(answer));
     });
-
     socket.on('signal-ice', async ({ from, candidate }) => {
       const peer = peers.get(from);
-      if (!peer) return;
-      try { await peer.pc.addIceCandidate(new RTCIceCandidate(candidate)); }
-      catch (e) { /* ignore dupes */ }
+      if (peer) await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
     });
 
-    // --- Public API ---
     return {
-      onRoster,
-      enterLocal,
-      leaveLocal,
-      // Create connection to a peer ID from roster
-      connect: async function connect(peerId, options = {}) {
-        const { pc, conn, dcRef } = createRTCPeer(peerId, true, options);
+      myName,
+      onRoster: cb => appEmitter.on('roster', cb),
+      connect: async peerId => {
+        const { pc, conn } = createRTCPeer(peerId, true);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        socket.emit('signal-offer', { to: peerId, offer, fromName: myName });
-        return conn; // emitter with: on('open'), sendFile(file), progress events, close()
-      },
+        socket.emit('signal-offer', { to: peerId, offer });
+        return conn;
+      }
     };
   }
 
-  // expose globally
   window.createP2PClient = createP2PClient;
 })();
