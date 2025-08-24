@@ -1,0 +1,14 @@
+body { font-family: sans-serif; padding: 1em; }
+#peers { display: flex; flex-wrap: wrap; gap: 1em; }
+.peer {
+  padding: 10px 15px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.peer:hover { background: #f0f0f0; }
+.progress {
+  font-size: 0.9em;
+  color: #333;
+  margin-top: 4px;
+}
