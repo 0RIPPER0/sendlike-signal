@@ -2,86 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>P2P Demo</title>
-  <style>
-    body { font-family: sans-serif; padding: 1em; }
-    #peers { display: flex; flex-wrap: wrap; gap: 1em; }
-    .peer {
-      padding: 10px 15px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    .peer:hover { background: #f0f0f0; }
-    .progress {
-      font-size: 0.9em;
-      color: #333;
-      margin-top: 4px;
-    }
-  </style>
+  <title>P2P File Share</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>P2P File Share (Local WiFi)</h1>
+  <h1>P2P File Share (Same WiFi)</h1>
   <p id="me"></p>
+
   <h2>Peers</h2>
   <div id="peers"></div>
+
   <input type="file" id="fileInput" hidden />
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
-  <script>
-    const meEl = document.getElementById('me');
-    const peersEl = document.getElementById('peers');
-    const fileInput = document.getElementById('fileInput');
-
-    const p2p = createP2PClient({ signalingURL: location.origin });
-    meEl.textContent = "You are: " + p2p.myName;
-
-    let targetPeer = null;
-    let activeConn = null;
-
-    // update roster
-    p2p.onRoster(list => {
-      peersEl.innerHTML = '';
-      list.forEach(p => {
-        if (p.id === io().id) return; // skip self
-        const div = document.createElement('div');
-        div.className = 'peer';
-        div.textContent = p.name;
-        div.onclick = async () => {
-          targetPeer = p.id;
-          console.log("Connecting to", p.name);
-          activeConn = await p2p.connect(targetPeer);
-          activeConn.on('open', () => {
-            console.log("Connected to", p.name);
-            fileInput.click();
-          });
-          activeConn.on('send-progress', e => showProgress('Sending', e));
-          activeConn.on('recv-progress', e => showProgress('Receiving', e));
-          activeConn.on('recv-complete', e => console.log("Received complete", e));
-          activeConn.on('send-complete', e => console.log("Send complete", e));
-        };
-        peersEl.appendChild(div);
-      });
-    });
-
-    fileInput.addEventListener('change', () => {
-      if (activeConn && fileInput.files.length) {
-        const file = fileInput.files[0];
-        console.log("Sending file:", file.name, file.size);
-        activeConn.sendFile(file);
-      }
-    });
-
-    function showProgress(label, { percent, total }) {
-      let prog = document.querySelector('.progress');
-      if (!prog) {
-        prog = document.createElement('div');
-        prog.className = 'progress';
-        document.body.appendChild(prog);
-      }
-      prog.textContent = `${label}: ${percent}% of ${(total/(1024*1024)).toFixed(1)} MB`;
-    }
-  </script>
 </body>
 </html>
