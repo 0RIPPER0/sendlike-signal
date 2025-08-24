@@ -1,0 +1,20 @@
+{
+  "name": "p2p-share",
+  "version": "1.0.0",
+  "description": "Simple P2P file sharing over WebRTC with local signaling",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
