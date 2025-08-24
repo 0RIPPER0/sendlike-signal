@@ -39,6 +39,62 @@
   </main>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="client.js"></script>
+  <script src="script.js"></script>
+  <script>
+    // --- Bind UI to SL core ---
+    const myNameEl = document.getElementById("myName");
+    const myIdEl = document.getElementById("myId");
+    const peersEl = document.getElementById("peers");
+    const peerSelect = document.getElementById("peerSelect");
+    const pickFileBtn = document.getElementById("pickFileBtn");
+    const fileInput = document.getElementById("fileInput");
+    const connectBtn = document.getElementById("connectBtn");
+    const statusEl = document.getElementById("status");
+    const transfersEl = document.getElementById("transfers");
+
+    const { id, name } = SL.init();
+    myNameEl.textContent = name;
+
+    SL.on("roster", list => {
+      peersEl.innerHTML = "";
+      peerSelect.innerHTML = "<option value=''>Select peer</option>";
+      list.forEach(p => {
+        const d = document.createElement("div");
+        d.className = "peer";
+        d.textContent = p.name + " — " + p.id.slice(0,6);
+        d.onclick = () => { peerSelect.value = p.id; };
+        peersEl.appendChild(d);
+
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.name + " (" + p.id.slice(0,6) + ")";
+        peerSelect.appendChild(opt);
+      });
+    });
+
+    SL.on("send:progress", e => {
+      statusEl.textContent = `Sending ${e.name}: ${e.pct.toFixed(1)}% at ${e.rateMbps.toFixed(2)} Mbps`;
+    });
+    SL.on("recv:file:progress", e => {
+      statusEl.textContent = `Receiving: ${e.pct.toFixed(1)}%`;
+    });
+    SL.on("recv:file:done", e => {
+      statusEl.textContent = `Received ${e.meta.name}`;
+    });
+
+    pickFileBtn.onclick = () => fileInput.click();
+    fileInput.onchange = async () => {
+      const peerId = peerSelect.value;
+      if (!peerId) return alert("Select peer first");
+      for (const f of fileInput.files) {
+        SL.sendFile(peerId, f).catch(err => console.error(err));
+      }
+    };
+    connectBtn.onclick = () => {
+      const peerId = peerSelect.value;
+      if (!peerId) return alert("Select peer first");
+      SL.connect(peerId);
+    };
+  </script>
 </body>
 </html>
