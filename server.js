@@ -1,4 +1,9 @@
-// server.js
+/* =========================================================
+   SendLike — Minimal Signaling Server (Socket.IO)
+   - Pure signaling only (SDP + ICE). File bytes never pass server.
+   - Serves files from ./public
+   ========================================================= */
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -6,44 +11,39 @@ const path = require("path");
 
 const app = express();
 const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
 
-// ✅ CORS: allow your web app to connect over WSS from your Railway domain
-const io = new Server(server, {
-  cors: {
-    origin: "*",            // you can tighten this to your Railway URL later
-    methods: ["GET", "POST"]
-  }
-});
+const PORT = process.env.PORT || 3000;
 
-// serve static client
+// serve client from public/
 app.use(express.static(path.join(__dirname, "public")));
 
-const peers = new Map(); // id -> { id, name }
+// in-memory roster: socketId -> { id, name }
+const roster = new Map();
 
-io.on("connection", socket => {
-  console.log("Peer connected:", socket.id);
+function broadcastRoster(){
+  const list = Array.from(roster.values()).map(x => ({ id: x.id, name: x.name }));
+  io.emit("roster", list);
+}
 
-  socket.on("join", name => {
-    peers.set(socket.id, { id: socket.id, name });
-    pushRoster();
-  });
+io.on("connection", (socket) => {
+  console.log("socket connected", socket.id);
 
-  // WebRTC signaling relay
-  socket.on("signal", ({ to, data }) => {
-    io.to(to).emit("signal", { from: socket.id, data });
+  socket.on("announce", ({ name }) => {
+    roster.set(socket.id, { id: socket.id, name: name || ("Peer"+Math.floor(Math.random()*9999)) });
+    broadcastRoster();
   });
 
   socket.on("disconnect", () => {
-    peers.delete(socket.id);
-    pushRoster();
-    console.log("Peer disconnected:", socket.id);
+    roster.delete(socket.id);
+    broadcastRoster();
+    console.log("socket disconnected", socket.id);
   });
 
-  function pushRoster() {
-    const list = Array.from(peers.values());
-    io.emit("roster", list);
-  }
+  // Signaling messages: forward to target
+  socket.on("offer", ({ to, sdp }) => { io.to(to).emit("offer", { from: socket.id, sdp }); });
+  socket.on("answer", ({ to, sdp }) => { io.to(to).emit("answer", { from: socket.id, sdp }); });
+  socket.on("ice", ({ to, candidate }) => { io.to(to).emit("ice", { from: socket.id, candidate }); });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log("[P2P] Signaling server on", PORT));
+server.listen(PORT, () => console.log("Signaling server listening on", PORT));
