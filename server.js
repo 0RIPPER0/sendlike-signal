@@ -1,45 +1,37 @@
-// server.js
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const io = new Server(server, {
+  cors: { origin: "*" }
+});
 
-// serve static files (index.html, script.js, etc.)
+// serve static files (index.html, script.js, style.css, etc.)
 app.use(express.static(__dirname + "/public"));
 
-// --- roster state ---
-let localRoom = {}; // socket.id -> {id,name}
-
-function sendRoster() {
-  io.emit("localRoster", Object.values(localRoom));
-}
+let roster = {}; // socket.id -> {id, name}
 
 io.on("connection", (socket) => {
   console.log("Peer connected:", socket.id);
 
-  // client joins local discovery
-  socket.on("enterLocal", (name) => {
-    localRoom[socket.id] = { id: socket.id, name: name || "Peer" };
-    sendRoster();
+  // announce peer
+  socket.on("announce", (data) => {
+    roster[socket.id] = { id: socket.id, name: data.name || "Peer" };
+    io.emit("roster", Object.values(roster));
   });
 
-  socket.on("leaveLocal", () => {
-    delete localRoom[socket.id];
-    sendRoster();
-  });
-
-  // forward generic signaling messages
+  // unified signaling channel
   socket.on("signal", ({ target, data }) => {
     io.to(target).emit("signal", { from: socket.id, data });
   });
 
+  // cleanup
   socket.on("disconnect", () => {
     console.log("Peer disconnected:", socket.id);
-    delete localRoom[socket.id];
-    sendRoster();
+    delete roster[socket.id];
+    io.emit("roster", Object.values(roster));
   });
 });
 
