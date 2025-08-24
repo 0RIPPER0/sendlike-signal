@@ -2,18 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>SendLike — P2P File Share</title>
+  <title>SendLike — P2P File Share (LAN)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main class="wrap">
     <h1>SendLike — P2P File Share (Local WiFi)</h1>
-    <p class="muted">Signaling only — file bytes go peer-to-peer via WebRTC.</p>
+    <p class="muted">Socket.IO for signaling only. File bytes go peer-to-peer via WebRTC.</p>
 
     <section class="me">
-      <div><strong>Your name:</strong> <span id="myName">...</span></div>
-      <div><strong>Your id:</strong> <span id="myId">...</span></div>
+      <div><strong>Your name:</strong> <span id="myName">…</span></div>
+      <div><strong>Your id:</strong> <span id="myId">…</span></div>
     </section>
 
     <section>
@@ -24,7 +24,7 @@
     <section>
       <h2>Transfer</h2>
       <div class="controls">
-        <input id="fileInput" type="file" multiple hidden>
+        <input id="fileInput" type="file" multiple hidden />
         <button id="pickFileBtn">Pick file(s)</button>
         <select id="peerSelect"><option value="">Select peer</option></select>
         <button id="connectBtn">Connect / Offer</button>
@@ -34,39 +34,35 @@
     </section>
 
     <footer class="muted small">
-      Uses WebRTC DataChannel (STUN only by default). If NAT traversal fails you will need a TURN server.
+      Using STUN only. If NAT traversal fails across networks, deploy a TURN server.
     </footer>
   </main>
 
-  <!-- Socket.io client -->
+  <!-- Socket.IO client -->
   <script src="/socket.io/socket.io.js"></script>
-  <!-- SendLike P2P core -->
+  <!-- P2P core -->
   <script src="script.js"></script>
 
   <script>
-    // --- Bind UI to SL core ---
+    // --- Bind minimal UI to SL core ---
     const myNameEl   = document.getElementById("myName");
     const myIdEl     = document.getElementById("myId");
     const peersEl    = document.getElementById("peers");
     const peerSelect = document.getElementById("peerSelect");
-    const pickFileBtn= document.getElementById("pickFileBtn");
+    const pickBtn    = document.getElementById("pickFileBtn");
     const fileInput  = document.getElementById("fileInput");
     const connectBtn = document.getElementById("connectBtn");
     const statusEl   = document.getElementById("status");
-    const transfersEl= document.getElementById("transfers");
 
-    // Init SendLike core
-    const { name } = SL.init();
+    const { id, name } = SL.init(); // returns placeholder id (may be null until socket connects)
     myNameEl.textContent = name;
 
-    // Show ID once connected
-    SL.on("connected", () => {
-      if (SL.state?.myId) {
-        myIdEl.textContent = SL.state.myId.slice(0,6); // show only first 6 chars
-      }
+    // Update my ID once socket connects (fixes blank ID)
+    SL.on("socket:connect", ({ myId }) => {
+      myIdEl.textContent = myId;
     });
 
-    // Update peer list
+    // Roster rendered from SL (client core converts localRoster -> roster)
     SL.on("roster", list => {
       peersEl.innerHTML = "";
       peerSelect.innerHTML = "<option value=''>Select peer</option>";
@@ -84,7 +80,7 @@
       });
     });
 
-    // Progress + status
+    // Progress / status
     SL.on("send:progress", e => {
       statusEl.textContent = `Sending ${e.name}: ${e.pct.toFixed(1)}% at ${e.rateMbps.toFixed(2)} Mbps`;
     });
@@ -94,9 +90,13 @@
     SL.on("recv:file:done", e => {
       statusEl.textContent = `Received ${e.meta.name}`;
     });
+    SL.on("error", e => {
+      console.warn("SL error:", e);
+      statusEl.textContent = `Error: ${e.error?.message || e.error || e.scope || 'Unknown'}`;
+    });
 
-    // File send
-    pickFileBtn.onclick = () => fileInput.click();
+    // Actions
+    pickBtn.onclick = () => fileInput.click();
     fileInput.onchange = async () => {
       const peerId = peerSelect.value;
       if (!peerId) return alert("Select peer first");
@@ -104,8 +104,6 @@
         SL.sendFile(peerId, f).catch(err => console.error(err));
       }
     };
-
-    // Manual connect
     connectBtn.onclick = () => {
       const peerId = peerSelect.value;
       if (!peerId) return alert("Select peer first");
